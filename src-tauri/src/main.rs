@@ -4,7 +4,7 @@ use tauri::Runtime;
 use std::thread;
 
 #[tauri::command]
-fn run_leaf<R: Runtime>(app: tauri::AppHandle<R>, window: tauri::Window<R>, config: String) {
+fn run_leaf<R: Runtime>(_app: tauri::AppHandle<R>, _window: tauri::Window<R>, config: String) {
     thread::spawn(move || {
         if !leaf::is_running(0) {
             let options = leaf::StartOptions {
@@ -19,7 +19,7 @@ fn run_leaf<R: Runtime>(app: tauri::AppHandle<R>, window: tauri::Window<R>, conf
 }
 
 #[tauri::command]
-fn stop_leaf<R: Runtime>(app: tauri::AppHandle<R>, window: tauri::Window<R>) {
+fn stop_leaf<R: Runtime>(_app: tauri::AppHandle<R>, _window: tauri::Window<R>) {
     thread::spawn(move || {
         if leaf::is_running(0) {
             let result = leaf::shutdown(0);
@@ -30,7 +30,7 @@ fn stop_leaf<R: Runtime>(app: tauri::AppHandle<R>, window: tauri::Window<R>) {
 
 // is leaf running
 #[tauri::command]
-fn is_leaf_running<R: Runtime>(app: tauri::AppHandle<R>, window: tauri::Window<R>) -> bool {
+fn is_leaf_running<R: Runtime>(_app: tauri::AppHandle<R>, _window: tauri::Window<R>) -> bool {
     leaf::is_running(0)
 }
 
