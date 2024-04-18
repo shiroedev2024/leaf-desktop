@@ -6,7 +6,7 @@ import Leaf from './components/Leaf.vue';
     <v-app>
     <v-main>
       <v-container>
-        <Leaf />
+          <Leaf />
       </v-container>
     </v-main>
   </v-app>

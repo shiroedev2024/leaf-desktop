@@ -11,10 +11,13 @@ edition = "2021"
 tauri-build = { version = "1", features = [] }
 
 [dependencies]
-tauri = { version = "1", features = ["shell-open"] }
+tauri = { version = "1", features = [ "dialog-message", "window-close", "shell-open"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+
 leaf = { git = "https://github.com/shiroedev2024/leaf.git", branch = "master", default-features = false, features = ["default-ring"] }
+[target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
+sudo = "0.6.0"
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
