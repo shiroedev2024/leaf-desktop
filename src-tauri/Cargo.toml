@@ -16,6 +16,8 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 leaf = { git = "https://github.com/shiroedev2024/leaf.git", branch = "master", default-features = false, features = ["default-ring"] }
+doh = { git = "https://github.com/shiroedev2024/doh-client.git", branch = "master" , default-features = false }
+
 [target.'cfg(any(target_os = "macos", target_os = "linux"))'.dependencies]
 sudo = "0.6.0"
 
