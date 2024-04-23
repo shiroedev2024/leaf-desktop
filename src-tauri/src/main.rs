@@ -42,7 +42,7 @@ struct Result {
 }
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
-struct Doh {
+struct DohConfig {
     listen: String,
     server: String,
     domain: String,
@@ -68,7 +68,7 @@ fn start<R: Runtime>(_app: tauri::AppHandle<R>, window: Window<R>, leaf_config: 
     let window_clone = window.clone();
     tauri::async_runtime::spawn_blocking(move || {
         if !doh::is_doh_running() {
-            let doh_config: Doh = serde_json::from_str(doh_config.as_str()).unwrap();
+            let doh_config: DohConfig = serde_json::from_str(doh_config.as_str()).unwrap();
 
             let listen_config = doh::ListenConfig::Addr(doh_config.listen.parse().unwrap());
 
