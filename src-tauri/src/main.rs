@@ -1,50 +1,27 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::io::BufRead;
 use std::net::{IpAddr, SocketAddr};
-use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 use tauri::{Runtime, Window};
 
-#[derive(Clone, Serialize)]
-enum State {
-    #[serde(rename = "leaf_running")]
-    LeafRunning,
-    #[serde(rename = "start_leaf_success")]
-    StartLeafSuccess,
-    #[serde(rename = "start_leaf_error")]
-    StartLeafError,
-    #[serde(rename = "stop_leaf_success")]
-    StopLeafSuccess,
-    #[serde(rename = "stop_leaf_error")]
-    StopLeafError,
-    #[serde(rename = "leaf_not_running")]
-    LeafNotRunning,
-    #[serde(rename = "doh_running")]
-    DohRunning,
+#[derive(Serialize, Clone)]
+enum AppState {
     #[serde(rename = "start_doh_success")]
     StartDohSuccess,
-    #[serde(rename = "start_doh_error")]
-    StartDohError,
-    #[serde(rename = "stop_doh_success")]
-    StopDohSuccess,
-    #[serde(rename = "stop_doh_error")]
-    StopDohError,
-    #[serde(rename = "doh_not_running")]
-    DohNotRunning,
+    #[serde(rename = "start_leaf_success")]
+    StartLeafSuccess,
 }
 
-#[derive(Clone, Serialize)]
-struct Result {
-    state: State,
-    message: Option<String>,
+#[derive(Serialize, Clone)]
+struct AppEvent {
+    state: AppState,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Deserialize)]
 struct DohConfig {
-    listen: String,
-    server: String,
+    listen: SocketAddr,
+    server: SocketAddr,
     domain: String,
     path: String,
     post: bool,
@@ -54,162 +31,170 @@ struct DohConfig {
     fragment_intervals: String,
 }
 
-fn send_event<R: Runtime>(window: MutexGuard<Window<R>>, state: State, message: Option<String>) {
-    window.emit("custom_event", Result {
-        state,
-        message,
-    }).unwrap();
-}
-
 #[tauri::command]
-fn start<R: Runtime>(_app: tauri::AppHandle<R>, window: Window<R>, leaf_config: String, doh_config: String) {
-    let window = Arc::new(Mutex::new(window));
-
-    let window_clone = window.clone();
+async fn run_doh<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    window: Window<R>,
+    doh_config: String,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if !doh::is_doh_running() {
-            let doh_config: DohConfig = serde_json::from_str(doh_config.as_str()).unwrap();
+        let doh_config: DohConfig = serde_json::from_str(doh_config.as_str())
+            .map_err(|e| format!("failed to parse doh config: {}", e))?;
+        let listen_config = doh::ListenConfig::Addr(doh_config.listen);
 
-            let listen_config = doh::ListenConfig::Addr(doh_config.listen.parse().unwrap());
-
-            let server: SocketAddr = doh_config.server.parse().unwrap();
-            let ip = match server.ip() {
-                IpAddr::V4(v4) => v4.to_string(),
-                IpAddr::V6(v6) => v6.to_string(),
-            };
-            let port = server.port();
-
-            let remote_config = if doh_config.fragment {
-                let (packets_from, packets_to) = parse_fragment_option(doh_config.fragment_packets).unwrap();
-                let (length_min, length_max) = parse_fragment_option(doh_config.fragment_lengths).unwrap();
-                let (interval_min, interval_max) = parse_fragment_option(doh_config.fragment_intervals).unwrap();
-
-                doh::RemoteHost::Fragment(
-                    ip,
-                    port,
-                    packets_from,
-                    packets_to,
-                    length_min,
-                    length_max,
-                    interval_min,
-                    interval_max,
-                )
-            } else {
-                doh::RemoteHost::Direct(ip, port)
-            };
-
-            let doh_config = doh::Config::new(
-                listen_config,
-                remote_config,
-                doh_config.domain.as_str(),
-                None,
-                None,
-                doh_config.path.as_str(),
-                1,
-                10,
-                doh_config.post,
-                0,
-                false,
-            ).unwrap();
-
-            match doh::run_doh(doh_config) {
-                Ok(_) => send_event(window_clone.lock().unwrap(), State::StopDohSuccess, None),
-                Err(e) => send_event(window_clone.lock().unwrap(), State::StartDohError, Some(e.to_string())),
-            }
-        } else {
-            println!("doh already running");
+        let ip = match doh_config.server.ip() {
+            IpAddr::V4(v4) => v4.to_string(),
+            IpAddr::V6(v6) => v6.to_string(),
         };
-    });
+        let port = doh_config.server.port();
 
-    let window_clone = window.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if !leaf::is_running(0) {
-            let options = leaf::StartOptions {
-                config: leaf::Config::Str(leaf_config),
-                runtime_opt: leaf::RuntimeOption::SingleThread,
-            };
-            match leaf::start(0, options) {
-                Ok(_) => send_event(window_clone.lock().unwrap(), State::StopLeafSuccess, None),
-                Err(e) => send_event(window_clone.lock().unwrap(), State::StartLeafError, Some(e.to_string())),
-            };
+        let remote_config = if !doh_config.fragment {
+            doh::RemoteHost::Direct(ip, port)
         } else {
-            println!("leaf already running");
+            let (packets_from, packets_to) = parse_fragment_option(doh_config.fragment_packets)?;
+            let (length_min, length_max) = parse_fragment_option(doh_config.fragment_lengths)?;
+            let (interval_min, interval_max) =
+                parse_fragment_option(doh_config.fragment_intervals)?;
+
+            doh::RemoteHost::Fragment(
+                ip,
+                port,
+                packets_from,
+                packets_to,
+                length_min,
+                length_max,
+                interval_min,
+                interval_max,
+            )
         };
-    });
+
+        let doh_config = doh::Config::new(
+            listen_config,
+            remote_config,
+            doh_config.domain.as_str(),
+            None,
+            None,
+            doh_config.path.as_str(),
+            1,
+            10,
+            doh_config.post,
+            0,
+            false,
+        )
+        .map_err(|e| format!("failed to create doh config: {}", e))?;
+
+        window
+            .emit(
+                "app_event",
+                AppEvent {
+                    state: AppState::StartDohSuccess,
+                },
+            )
+            .map_err(|e| format!("failed to emit app_event: {}", e))?;
+
+        if let Err(e) = doh::run_doh(doh_config) {
+            Err(format!("failed to start doh: {}", e))
+        } else {
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("failed to start doh: {}", e))?
 }
 
 #[tauri::command]
-fn stop<R: Runtime>(_app: tauri::AppHandle<R>, window: Window<R>) {
-    let window = Arc::new(Mutex::new(window));
-
-    let window_clone = window.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if doh::is_doh_running() {
-            if doh::shutdown_doh().is_err() {
-                send_event(window_clone.lock().unwrap(), State::StopDohError, None);
-            }
-        } else {
-            println!("doh not running");
-        }
-    });
-
-    let window_clone = window.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if leaf::is_running(0) {
-            if !leaf::shutdown(0) {
-                send_event(window_clone.lock().unwrap(), State::StopLeafError, None);
-            }
-        } else {
-            println!("leaf not running");
-        }
-    });
+fn is_doh_running<R: Runtime>(_app: tauri::AppHandle<R>, _window: Window<R>) -> bool {
+    doh::is_doh_running()
 }
 
 #[tauri::command]
-fn is_leaf_running<R: Runtime>(_app: tauri::AppHandle<R>, window: Window<R>) {
-    let window = Arc::new(Mutex::new(window));
-
-    let window_clone = window.clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        if leaf::is_running(0) {
-            send_event(window_clone.lock().unwrap(), State::LeafRunning, None);
-        } else {
-            send_event(window_clone.lock().unwrap(), State::LeafNotRunning, None);
-        }
-    });
+fn stop_doh<R: Runtime>(_app: tauri::AppHandle<R>, _window: Window<R>) -> bool {
+    doh::shutdown_doh().is_ok()
 }
 
 #[tauri::command]
-fn is_doh_running<R: Runtime>(_app: tauri::AppHandle<R>, window: Window<R>) {
-    let window = Arc::new(Mutex::new(window));
-
-    let window_clone = window.clone();
+async fn run_leaf<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    window: Window<R>,
+    leaf_config: String,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        if doh::is_doh_running() {
-            send_event(window_clone.lock().unwrap(), State::DohRunning, None);
+        let options = leaf::StartOptions {
+            config: leaf::Config::Str(leaf_config),
+            runtime_opt: leaf::RuntimeOption::SingleThread,
+        };
+
+        window
+            .emit(
+                "app_event",
+                AppEvent {
+                    state: AppState::StartLeafSuccess,
+                },
+            )
+            .map_err(|e| format!("failed to emit app_event: {}", e))?;
+
+        if let Err(e) = leaf::start(0, options) {
+            Err(format!("failed to start leaf: {}", e))
         } else {
-            send_event(window_clone.lock().unwrap(), State::DohNotRunning, None);
+            Ok(())
         }
-    });
+    })
+    .await
+    .map_err(|e| format!("failed to start leaf: {}", e))?
 }
 
-fn parse_fragment_option(option: String) -> Option<(u64, u64)> {
+#[tauri::command]
+fn is_leaf_running<R: Runtime>(_app: tauri::AppHandle<R>, _window: Window<R>) -> bool {
+    leaf::is_running(0)
+}
+
+#[tauri::command]
+async fn reload_leaf<R: Runtime>(
+    _app: tauri::AppHandle<R>,
+    _window: Window<R>,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Err(e) = leaf::reload(0) {
+            Err(format!("failed to reload leaf: {}", e))
+        } else {
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("failed to reload leaf: {}", e))?
+}
+
+#[tauri::command]
+fn stop_leaf<R: Runtime>(_app: tauri::AppHandle<R>, _window: Window<R>) -> bool {
+    leaf::shutdown(0)
+}
+
+fn parse_fragment_option(option: String) -> Result<(u64, u64), String> {
     let parts: Vec<&str> = option.split('-').map(str::trim).collect();
     if parts.len() == 2 {
-        let start = parts[0].parse::<u64>().ok()?;
-        let end = parts[1].parse::<u64>().ok()?;
-        Some((start, end))
+        let start = parts[0]
+            .parse::<u64>()
+            .map_err(|_| "failed to parse as u64")?;
+        let end = parts[1]
+            .parse::<u64>()
+            .map_err(|_| "failed to parse as u64")?;
+        Ok((start, end))
     } else {
-        None
+        Err("invalid fragment option".to_string())
     }
 }
 
 fn main() {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    sudo::escalate_if_needed().unwrap();
-
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![start, stop, is_leaf_running, is_doh_running])
+        .invoke_handler(tauri::generate_handler![
+            run_doh,
+            is_doh_running,
+            stop_doh,
+            run_leaf,
+            reload_leaf,
+            is_leaf_running,
+            stop_leaf
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

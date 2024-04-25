@@ -844,7 +844,7 @@ dependencies = [
 [[package]]
 name = "doh"
 version = "3.1.3"
-source = "git+https://github.com/shiroedev2024/doh-client.git?branch=master#71d1bb72a94411298db75f6cc997ebf907b1c402"
+source = "git+https://github.com/shiroedev2024/doh-client.git?branch=master#cb164294c67decc772347d607bc22a058c2c2658"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
@@ -1944,7 +1944,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 [[package]]
 name = "leaf"
 version = "0.1.5"
-source = "git+https://github.com/shiroedev2024/leaf.git?branch=master#13eef576b4b4e48cac8027df00cff0b82366db0c"
+source = "git+https://github.com/shiroedev2024/leaf.git?branch=master#2f02873e26ac7bc37b52af41b3a0a9110da00edf"
 dependencies = [
  "aes",
  "anyhow",
@@ -2018,10 +2018,8 @@ version = "0.0.3"
 dependencies = [
  "doh",
  "leaf",
- "log",
  "serde",
  "serde_json",
- "sudo",
  "tauri",
  "tauri-build",
 ]
@@ -3605,16 +3603,6 @@ name = "subtle"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81cdd64d312baedb58e21336b31bc043b77e01cc99033ce76ef539f78e965ebc"
-
-[[package]]
-name = "sudo"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "88bd84d4c082e18e37fef52c0088e4407dabcef19d23a607fb4b5ee03b7d5b83"
-dependencies = [
- "libc",
- "log",
-]
 
 [[package]]
 name = "syn"
