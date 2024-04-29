@@ -14,9 +14,7 @@ tauri-build = { version = "1", features = [] }
 tauri = { version = "1", features = [ "dialog-message", "window-close", "shell-open"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-
 leaf = { git = "https://github.com/shiroedev2024/leaf.git", branch = "master", default-features = false, features = ["default-ring"] }
-doh = { git = "https://github.com/shiroedev2024/doh-client.git", branch = "master" , default-features = false, features = ["fragment"] }
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!
