@@ -7,14 +7,16 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  copyFileSync,
 } from 'fs';
 import { join } from 'path';
 import { config } from 'dotenv';
 import archiver from 'archiver';
 import axios from 'axios';
 import FormData from 'form-data';
+import glob from 'glob';
 
-config(); // Load environment variables from .env
+config();
 
 const PROJECT_ROOT = process.cwd();
 const RELEASE_DIR = join(PROJECT_ROOT, 'release');
@@ -101,6 +103,38 @@ function getSimpleArchFromTarget(target) {
   return 'unknown';
 }
 
+function findAndCopyArtifact(baseDir, expectedName, safeDestName, version) {
+  const primarySrc = join(baseDir, expectedName);
+  if (existsSync(primarySrc)) {
+    console.log(`Found primary artifact: ${primarySrc}`);
+    return primarySrc;
+  }
+
+  console.log(
+    `Primary src missing (${primarySrc}); searching for sanitized variant...`
+  );
+  const patterns = [
+    join(baseDir, `*${version}*`),
+    join(baseDir, `Leaf*.${version}*`),
+    join(baseDir, `Leaf*${version}*`),
+  ];
+  let found = null;
+  for (const pattern of patterns) {
+    const matches = glob.sync(pattern);
+    if (matches.length > 0) {
+      found = matches[0];
+      console.log(
+        `Found sanitized: ${found} → copying to safe: ${safeDestName}`
+      );
+      const safePath = join(baseDir, safeDestName);
+      copyFileSync(found, safePath);
+      return safePath;
+    }
+  }
+  console.warn(`No artifact found for ${expectedName}; skipping.`);
+  return null;
+}
+
 function buildForTarget(target) {
   console.log(`Building for target: ${target}`);
 
@@ -134,8 +168,8 @@ function createZip(files, zipFileName) {
 
     let addedAny = false;
     for (const file of files) {
-      if (!existsSync(file.src)) {
-        console.warn(`Skipping missing artifact: ${file.src}`);
+      if (!file.src || !existsSync(file.src)) {
+        console.warn(`Skipping missing artifact: ${file.src || 'unknown'}`);
         continue;
       }
       archive.file(file.src, { name: file.dest });
@@ -302,34 +336,36 @@ async function main() {
       switch (platform) {
         case 'macos': {
           const macPrefix = getSimpleArchFromTarget(target);
-          files.push(
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'macos',
-                `${productName}.app.tar.gz`
-              ),
-              dest: `${safeProductName}_${version}_${macPrefix}.app.tar.gz`,
-            },
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'macos',
-                `${productName}.app.tar.gz.sig`
-              ),
-              dest: `${safeProductName}_${version}_${macPrefix}.app.tar.gz.sig`,
-            }
+          const expectedTarGz = `${productName}.app.tar.gz`;
+          const expectedSig = `${productName}.app.tar.gz.sig`;
+          const safeTarGz = `${safeProductName}_${version}_${macPrefix}.app.tar.gz`;
+          const safeSig = `${safeProductName}_${version}_${macPrefix}.app.tar.gz.sig`;
+
+          const macBundleDir = join(
+            PROJECT_ROOT,
+            'src-tauri',
+            'target',
+            target,
+            'release',
+            'bundle',
+            'macos'
           );
+          const tarGzSrc = findAndCopyArtifact(
+            macBundleDir,
+            expectedTarGz,
+            safeTarGz,
+            version
+          );
+          const sigSrc = findAndCopyArtifact(
+            macBundleDir,
+            expectedSig,
+            safeSig,
+            version
+          );
+
+          if (tarGzSrc) files.push({ src: tarGzSrc, dest: safeTarGz });
+          if (sigSrc) files.push({ src: sigSrc, dest: safeSig });
+
           zipFileBase = `leaf-vpn-macos-${version}`;
           break;
         }
@@ -354,60 +390,65 @@ async function main() {
             rpmPrefix = '1.i686';
           }
 
-          files.push(
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'deb',
-                `${productName}_${version}_${debPrefix}.deb`
-              ),
-              dest: `${productName}_${version}_${debPrefix}.deb`,
-            },
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'deb',
-                `${productName}_${version}_${debPrefix}.deb.sig`
-              ),
-              dest: `${productName}_${version}_${debPrefix}.deb.sig`,
-            },
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'rpm',
-                `${productName}-${version}-${rpmPrefix}.rpm`
-              ),
-              dest: `${productName}-${version}-${rpmPrefix}.rpm`,
-            },
-            {
-              src: join(
-                PROJECT_ROOT,
-                'src-tauri',
-                'target',
-                target,
-                'release',
-                'bundle',
-                'rpm',
-                `${productName}-${version}-${rpmPrefix}.rpm.sig`
-              ),
-              dest: `${productName}-${version}-${rpmPrefix}.rpm.sig`,
-            }
+          const expectedDeb = `${productName}_${version}_${debPrefix}.deb`;
+          const expectedDebSig = `${productName}_${version}_${debPrefix}.deb.sig`;
+          const expectedRpm = `${productName}-${version}-${rpmPrefix}.rpm`;
+          const expectedRpmSig = `${productName}-${version}-${rpmPrefix}.rpm.sig`;
+
+          const safeDeb = `${safeProductName}_${version}_${debPrefix}.deb`;
+          const safeDebSig = `${safeProductName}_${version}_${debPrefix}.deb.sig`;
+          const safeRpm = `${safeProductName}-${version}-${rpmPrefix}.rpm`;
+          const safeRpmSig = `${safeProductName}-${version}-${rpmPrefix}.rpm.sig`;
+
+          const debDir = join(
+            PROJECT_ROOT,
+            'src-tauri',
+            'target',
+            target,
+            'release',
+            'bundle',
+            'deb'
           );
+          const rpmDir = join(
+            PROJECT_ROOT,
+            'src-tauri',
+            'target',
+            target,
+            'release',
+            'bundle',
+            'rpm'
+          );
+
+          const debSrc = findAndCopyArtifact(
+            debDir,
+            expectedDeb,
+            safeDeb,
+            version
+          );
+          const debSigSrc = findAndCopyArtifact(
+            debDir,
+            expectedDebSig,
+            safeDebSig,
+            version
+          );
+          const rpmSrc = findAndCopyArtifact(
+            rpmDir,
+            expectedRpm,
+            safeRpm,
+            version
+          );
+          const rpmSigSrc = findAndCopyArtifact(
+            rpmDir,
+            expectedRpmSig,
+            safeRpmSig,
+            version
+          );
+
+          if (debSrc) files.push({ src: debSrc, dest: safeDeb });
+          if (debSigSrc) files.push({ src: debSigSrc, dest: safeDebSig });
+          if (rpmSrc) files.push({ src: rpmSrc, dest: safeRpm });
+          if (rpmSigSrc) files.push({ src: rpmSigSrc, dest: safeRpmSig });
+
           zipFileBase = `leaf-vpn-linux-${version}`;
           break;
         }
@@ -433,22 +474,27 @@ async function main() {
             'nsis'
           );
 
-          const exePath = join(
-            nsisDir,
-            `${productName}_${version}_${winPrefix}-setup.exe`
-          );
-          const sigPath = `${exePath}.sig`;
+          const expectedExe = `${productName}_${version}_${winPrefix}-setup.exe`;
+          const expectedSig = `${expectedExe}.sig`;
+          const safeExe = `${safeProductName}_${version}_${winPrefix}-setup.exe`;
+          const safeSig = `${safeExe}.sig`;
 
-          files.push(
-            {
-              src: exePath,
-              dest: `${productName}_${version}_${winPrefix}-setup.exe`,
-            },
-            {
-              src: sigPath,
-              dest: `${productName}_${version}_${winPrefix}-setup.exe.sig`,
-            }
+          const exeSrc = findAndCopyArtifact(
+            nsisDir,
+            expectedExe,
+            safeExe,
+            version
           );
+          const sigSrc = findAndCopyArtifact(
+            nsisDir,
+            expectedSig,
+            safeSig,
+            version
+          );
+
+          if (exeSrc) files.push({ src: exeSrc, dest: safeExe });
+          if (sigSrc) files.push({ src: sigSrc, dest: safeSig });
+
           zipFileBase = `leaf-vpn-windows-${version}`;
           break;
         }
@@ -465,7 +511,7 @@ async function main() {
       const seen = new Set();
       const uniqueFiles = [];
       for (const f of files) {
-        if (!seen.has(f.dest)) {
+        if (f.src && !seen.has(f.dest)) {
           uniqueFiles.push(f);
           seen.add(f.dest);
         }

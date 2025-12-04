@@ -402,6 +402,7 @@ jobs:
         run: |
           VERSION="${{ needs.create-release.outputs.app_version }}"
           REPO="shiroedev2024/leaf-desktop"
+          SAFE_NAME="Leaf_VPN"
           
           # Generate download table in markdown format
           echo "## Download Leaf VPN v$VERSION" > download_table.md
@@ -410,43 +411,43 @@ jobs:
           echo "|----------|--------------|----------|" >> download_table.md
           
           # Windows downloads
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN_${VERSION}_x64-setup.exe"; then
-            echo "| Windows | x64 (64-bit) | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN_${VERSION}_x64-setup.exe) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_x64-setup.exe"; then
+            echo "| Windows | x64 (64-bit) | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_x64-setup.exe) |" >> download_table.md
           fi
           
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN_${VERSION}_x86-setup.exe"; then
-            echo "| Windows | x86 (32-bit) | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN_${VERSION}_x86-setup.exe) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_x86-setup.exe"; then
+            echo "| Windows | x86 (32-bit) | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_x86-setup.exe) |" >> download_table.md
           fi
           
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN_${VERSION}_arm64-setup.exe"; then
-            echo "| Windows | ARM64 | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN_${VERSION}_arm64-setup.exe) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_arm64-setup.exe"; then
+            echo "| Windows | ARM64 | [Download Installer (.exe)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_arm64-setup.exe) |" >> download_table.md
           fi
           
           # macOS downloads
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf_VPN_${VERSION}_x64.app.tar.gz"; then
-            echo "| macOS | Intel | [Download App (.tar.gz)](https://github.com/$REPO/releases/download/v$VERSION/Leaf_VPN_${VERSION}_x64.app.tar.gz) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_x64.app.tar.gz"; then
+            echo "| macOS | Intel | [Download App (.tar.gz)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_x64.app.tar.gz) |" >> download_table.md
           fi
           
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf_VPN_${VERSION}_arm64.app.tar.gz"; then
-            echo "| macOS | Apple Silicon | [Download App (.tar.gz)](https://github.com/$REPO/releases/download/v$VERSION/Leaf_VPN_${VERSION}_arm64.app.tar.gz) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_arm64.app.tar.gz"; then
+            echo "| macOS | Apple Silicon | [Download App (.tar.gz)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_arm64.app.tar.gz) |" >> download_table.md
           fi
           
           # Linux Debian/Ubuntu downloads
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN_${VERSION}_amd64.deb"; then
-            echo "| Linux (Debian/Ubuntu) | x64 | [Download Package (.deb)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN_${VERSION}_amd64.deb) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_amd64.deb"; then
+            echo "| Linux (Debian/Ubuntu) | x64 | [Download Package (.deb)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_amd64.deb) |" >> download_table.md
           fi
           
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN_${VERSION}_arm64.deb"; then
-            echo "| Linux (Debian/Ubuntu) | ARM64 | [Download Package (.deb)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN_${VERSION}_arm64.deb) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}_${VERSION}_arm64.deb"; then
+            echo "| Linux (Debian/Ubuntu) | ARM64 | [Download Package (.deb)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}_${VERSION}_arm64.deb) |" >> download_table.md
           fi
           
           # Linux RPM downloads
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN-${VERSION}-1.x86_64.rpm"; then
-            echo "| Linux (Red Hat/Fedora) | x64 | [Download Package (.rpm)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN-${VERSION}-1.x86_64.rpm) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}-${VERSION}-1.x86_64.rpm"; then
+            echo "| Linux (Red Hat/Fedora) | x64 | [Download Package (.rpm)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}-${VERSION}-1.x86_64.rpm) |" >> download_table.md
           fi
           
-          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "Leaf.VPN-${VERSION}-1.aarch64.rpm"; then
-            echo "| Linux (Red Hat/Fedora) | ARM64 | [Download Package (.rpm)](https://github.com/$REPO/releases/download/v$VERSION/Leaf.VPN-${VERSION}-1.aarch64.rpm) |" >> download_table.md
+          if gh release view "v$VERSION" --repo "$REPO" --json assets | grep -q "${SAFE_NAME}-${VERSION}-1.aarch64.rpm"; then
+            echo "| Linux (Red Hat/Fedora) | ARM64 | [Download Package (.rpm)](https://github.com/$REPO/releases/download/v$VERSION/${SAFE_NAME}-${VERSION}-1.aarch64.rpm) |" >> download_table.md
           fi
           
           echo "" >> download_table.md
