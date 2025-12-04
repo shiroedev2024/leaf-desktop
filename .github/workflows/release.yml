@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   create-release:
@@ -39,214 +40,63 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-  # Build for Windows
-  build-windows:
+  # Merged build job using matrix for all platforms
+  build:
     needs: create-release
-    runs-on: windows-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            rust_targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
+            yarn_targets: --target x86_64-pc-windows-msvc --target i686-pc-windows-msvc --target aarch64-pc-windows-msvc
+          - os: macos-latest
+            rust_targets: x86_64-apple-darwin,aarch64-apple-darwin
+            yarn_targets: --target x86_64-apple-darwin --target aarch64-apple-darwin
+          - os: ubuntu-22.04
+            rust_targets: x86_64-unknown-linux-gnu
+            yarn_targets: --target x86_64-unknown-linux-gnu
+          - os: ubuntu-22.04-arm
+            rust_targets: aarch64-unknown-linux-gnu
+            yarn_targets: --target aarch64-unknown-linux-gnu
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'yarn'
 
-      # Install nasm and cmake
-      - name: Install dependencies
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
         run: |
           choco install nasm
           choco install cmake
 
-      # Install Rust with specific targets
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
-
-      # Rust caching
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # Configure Cargo registry
-      - name: Configure Cargo registry
-        shell: bash
-        run: |
-          mkdir -p ~/.cargo
-          cat << EOF > ~/.cargo/config.toml
-          [registries.kellnr]
-          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-          credential-provider = ["cargo:token"]
-          
-          [registry]
-          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
-          EOF
-
-      # Set up environment variables
-      - name: Set up build environment
-        shell: bash
-        run: |
-          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
-          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
-          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
-
-      # Run yarn release with Windows targets
-      - name: Build and publish for Windows
-        shell: bash
-        run: |
-          yarn && yarn release --target x86_64-pc-windows-msvc --target i686-pc-windows-msvc --target aarch64-pc-windows-msvc --publish
-
-      # Upload files to GitHub release
-      - name: Upload files to GitHub release
-        shell: bash
-        run: |
-          mkdir -p release_files
-          
-          # Extract and upload files
-          for zip in release/*.zip; do
-            if [ -f "$zip" ]; then
-              echo "Extracting $zip"
-              unzip -o "$zip" -d release_files
-            fi
-          done
-          
-          cd release_files
-          for file in *; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-  # Build for macOS
-  build-macos:
-    needs: create-release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'yarn'
-
-      # Install nasm and cmake
-      - name: Install dependencies
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
         run: |
           brew install nasm
           brew install cmake
 
-      # Install Rust with specific targets
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin,aarch64-apple-darwin
-
-      # Rust caching
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # Configure Cargo registry
-      - name: Configure Cargo registry
-        shell: bash
-        run: |
-          mkdir -p ~/.cargo
-          cat << EOF > ~/.cargo/config.toml
-          [registries.kellnr]
-          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-          credential-provider = ["cargo:token"]
-          
-          [registry]
-          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
-          EOF
-
-      # Set up environment variables
-      - name: Set up build environment
-        shell: bash
-        run: |
-          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
-          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
-          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
-
-      # Run yarn release with macOS targets
-      - name: Build and publish for macOS
-        shell: bash
-        run: |
-          yarn && yarn release --target x86_64-apple-darwin --target aarch64-apple-darwin --publish
-
-      # Upload files to GitHub release
-      - name: Upload files to GitHub release
-        shell: bash
-        run: |
-          mkdir -p release_files
-          
-          # Extract and upload files
-          for zip in release/*.zip; do
-            if [ -f "$zip" ]; then
-              echo "Extracting $zip"
-              unzip -o "$zip" -d release_files
-            fi
-          done
-          
-          cd release_files
-          for file in *; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-  # Build for Linux x86_64
-  build-linux-x64:
-    needs: create-release
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-
-      # Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'yarn'
-
-      # Install nasm, cmake, and Linux dependencies
-      - name: Install dependencies
+      - name: Install dependencies (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y nasm cmake libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
-      # Install Rust with x86_64 target
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-gnu
+          targets: ${{ matrix.rust_targets }}
 
-      # Rust caching
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # Configure Cargo registry
       - name: Configure Cargo registry
         shell: bash
         run: |
@@ -260,7 +110,6 @@ jobs:
           token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
           EOF
 
-      # Set up environment variables
       - name: Set up build environment
         shell: bash
         run: |
@@ -270,100 +119,11 @@ jobs:
           echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
           echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
 
-      # Run yarn release for Linux x86_64
-      - name: Build and publish for Linux x86_64
+      - name: Build and publish
         shell: bash
         run: |
-          yarn && yarn release --target x86_64-unknown-linux-gnu --publish
+          yarn && yarn release ${{ matrix.yarn_targets }} --publish
 
-      # Upload files to GitHub release
-      - name: Upload files to GitHub release
-        shell: bash
-        run: |
-          mkdir -p release_files
-          
-          # Extract and upload files
-          for zip in release/*.zip; do
-            if [ -f "$zip" ]; then
-              echo "Extracting $zip"
-              unzip -o "$zip" -d release_files
-            fi
-          done
-          
-          cd release_files
-          for file in *; do
-            if [ -f "$file" ]; then
-              echo "Uploading $file to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
-            fi
-          done
-        env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-
-  # Build for Linux ARM64 using native ARM runners
-  build-linux-arm64:
-    needs: create-release
-    runs-on: ubuntu-22.04-arm
-    steps:
-      - uses: actions/checkout@v4
-
-      # Setup Node.js
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 'lts/*'
-          cache: 'yarn'
-
-      # Install nasm, cmake, and Linux dependencies
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y nasm cmake libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      # Install Rust with aarch64 target
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-unknown-linux-gnu
-
-      # Rust caching
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: './src-tauri -> target'
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # Configure Cargo registry
-      - name: Configure Cargo registry
-        shell: bash
-        run: |
-          mkdir -p ~/.cargo
-          cat << EOF > ~/.cargo/config.toml
-          [registries.kellnr]
-          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-          credential-provider = ["cargo:token"]
-          
-          [registry]
-          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
-          EOF
-
-      # Set up environment variables
-      - name: Set up build environment
-        shell: bash
-        run: |
-          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
-          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
-          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
-          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
-
-      # Run yarn release for Linux ARM64
-      - name: Build and publish for Linux ARM64
-        shell: bash
-        run: |
-          yarn && yarn release --target aarch64-unknown-linux-gnu --publish
-
-      # Upload files to GitHub release
       - name: Upload files to GitHub release
         shell: bash
         run: |
@@ -389,7 +149,7 @@ jobs:
 
   # Final step - publish the release after all builds are done
   publish-release:
-    needs: [ create-release, build-windows, build-macos, build-linux-x64, build-linux-arm64 ]
+    needs: [ create-release, build ]
     runs-on: ubuntu-latest
     # Only run if all builds succeeded
     if: success()
