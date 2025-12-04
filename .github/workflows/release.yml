@@ -1,0 +1,230 @@
+# .github/workflows/release.yml
+name: 'Build and Release'
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish the release'
+        type: boolean
+        default: true
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+      version: ${{ steps.app-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Get app version
+        id: app-version
+        run: |
+          VERSION=$(cat src-tauri/tauri.conf.json | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "App version: $VERSION"
+      
+      - name: Read release notes
+        id: release-notes
+        run: |
+          NOTES=$(cat release_note.txt)
+          echo "NOTES<<EOF" >> $GITHUB_ENV
+          echo "$NOTES" >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
+      
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="v${{ steps.app-version.outputs.version }}-$(date +'%Y%m%d-%H%M%S')"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Generated tag: $TAG"
+      
+      - name: Create Release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          result-encoding: string
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: '${{ steps.tag.outputs.tag }}',
+              name: 'Release v${{ steps.app-version.outputs.version }}',
+              body: process.env.NOTES,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: false
+            });
+            return data.id;
+
+  build-tauri:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, ubuntu-latest, macos-latest]
+        include:
+          - platform: windows-latest
+            args: '--target x86_64-pc-windows-msvc'
+          - platform: windows-latest
+            args: '--target i686-pc-windows-msvc'
+          - platform: windows-latest
+            args: '--target aarch64-pc-windows-msvc'
+          - platform: ubuntu-latest
+            args: '--target x86_64-unknown-linux-gnu'
+          - platform: ubuntu-latest
+            args: '--target aarch64-unknown-linux-gnu'
+          - platform: ubuntu-latest
+            args: '--target i686-unknown-linux-gnu'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+    
+    runs-on: ${{ matrix.platform }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'yarn'
+      
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ contains(matrix.args, '--target') && matrix.args | replace: '--target ', '' || '' }}
+      
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      
+      - name: Install app dependencies
+        run: yarn install
+      
+      - name: Set environment variables
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
+        run: |
+          # Create .env file for tauri-action to use
+          echo "TAURI_SIGNING_PRIVATE_KEY='$TAURI_SIGNING_PRIVATE_KEY'" > .env
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$TAURI_SIGNING_PRIVATE_KEY_PASSWORD'" >> .env
+          echo "CARGO_REGISTRIES_KELLNR_TOKEN='$CARGO_REGISTRIES_KELLNR_TOKEN'" >> .env
+      
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        with:
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          args: ${{ matrix.args }}
+          
+      - name: Save artifacts for publishing
+        if: matrix.args != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts-${{ matrix.platform }}-${{ matrix.args }}
+          path: |
+            src-tauri/target/*/release/bundle/**/*.{exe,msi,deb,rpm,app.tar.gz,dmg,AppImage}
+            src-tauri/target/*/release/bundle/**/*.{sig,hash}
+          retention-days: 3
+
+  publish-to-custom-api:
+    needs: [create-release, build-tauri]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Extract and organize release files
+        run: |
+          mkdir -p release_files
+          # Extract all files from artifacts directory
+          find artifacts -type f -not -path "*/\.*" | while read file; do
+            # Get the basename of the file
+            filename=$(basename "$file")
+            # Copy to release_files directory
+            cp "$file" "release_files/$filename"
+          done
+          
+          # List all found files
+          echo "Files for upload:"
+          ls -la release_files/
+      
+      - name: Upload to custom API
+        env:
+          UPLOAD_API_URL: ${{ secrets.UPLOAD_API_URL }}
+          UPLOAD_API_KEY: ${{ secrets.UPLOAD_API_KEY }}
+          VERSION: ${{ needs.create-release.outputs.version }}
+        run: |
+          # Find and process all Windows executables
+          windows_files=$(find release_files -name "*.exe" -o -name "*.msi")
+          if [ ! -z "$windows_files" ]; then
+            # Create a windows zip
+            mkdir -p windows
+            cp $windows_files windows/
+            zip -r windows.zip windows/
+            
+            # Upload Windows release
+            curl -X POST "$UPLOAD_API_URL" \
+              -H "X-API-Key: $UPLOAD_API_KEY" \
+              -F "zip=@windows.zip" \
+              -F "platform=windows" \
+              -F "version=$VERSION" \
+              -F "source=github-actions" \
+              -F "change_log[0][lang_code]=en" \
+              -F "change_log[0][text]=$(cat release_note.txt)"
+          fi
+          
+          # Find and process all macOS packages
+          macos_files=$(find release_files -name "*.app.tar.gz" -o -name "*.dmg")
+          if [ ! -z "$macos_files" ]; then
+            # Create a macOS zip
+            mkdir -p macos
+            cp $macos_files macos/
+            zip -r macos.zip macos/
+            
+            # Upload macOS release
+            curl -X POST "$UPLOAD_API_URL" \
+              -H "X-API-Key: $UPLOAD_API_KEY" \
+              -F "zip=@macos.zip" \
+              -F "platform=macos" \
+              -F "version=$VERSION" \
+              -F "source=github-actions" \
+              -F "change_log[0][lang_code]=en" \
+              -F "change_log[0][text]=$(cat release_note.txt)"
+          fi
+          
+          # Find and process all Linux packages
+          linux_files=$(find release_files -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage")
+          if [ ! -z "$linux_files" ]; then
+            # Create a Linux zip
+            mkdir -p linux
+            cp $linux_files linux/
+            zip -r linux.zip linux/
+            
+            # Upload Linux release
+            curl -X POST "$UPLOAD_API_URL" \
+              -H "X-API-Key: $UPLOAD_API_KEY" \
+              -F "zip=@linux.zip" \
+              -F "platform=linux" \
+              -F "version=$VERSION" \
+              -F "source=github-actions" \
+              -F "change_log[0][lang_code]=en" \
+              -F "change_log[0][text]=$(cat release_note.txt)"
+          fi
