@@ -27,19 +27,14 @@ jobs:
       - name: Read release notes
         id: release-notes
         shell: bash
-        run: |
-          NOTES=$(cat release_note.txt)
-          NOTES="${NOTES//'%'/'%25'}"
-          NOTES="${NOTES//$'\n'/'%0A'}"
-          NOTES="${NOTES//$'\r'/'%0D'}"
-          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+        run: cat release_note.txt
 
       - name: Create Release
         shell: bash
         run: |
           gh release create "v${{ steps.app-version.outputs.version }}" \
             --title "Leaf Desktop v${{ steps.app-version.outputs.version }}" \
-            --notes "${{ steps.release-notes.outputs.notes }}" \
+            --notes-file release_note.txt \
             --draft
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
@@ -126,15 +121,6 @@ jobs:
             if [ -f "$file" ]; then
               echo "Uploading $file to GitHub release"
               gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
-            fi
-          done
-          
-          # Upload zip files
-          cd ../release
-          for zip in *.zip; do
-            if [ -f "$zip" ]; then
-              echo "Uploading zip $zip to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
             fi
           done
         env:
@@ -224,15 +210,6 @@ jobs:
               gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
             fi
           done
-          
-          # Upload zip files
-          cd ../release
-          for zip in *.zip; do
-            if [ -f "$zip" ]; then
-              echo "Uploading zip $zip to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
-            fi
-          done
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
@@ -318,15 +295,6 @@ jobs:
             if [ -f "$file" ]; then
               echo "Uploading $file to GitHub release"
               gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
-            fi
-          done
-          
-          # Upload zip files
-          cd ../release
-          for zip in *.zip; do
-            if [ -f "$zip" ]; then
-              echo "Uploading zip $zip to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
             fi
           done
         env:
@@ -416,15 +384,6 @@ jobs:
               gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
             fi
           done
-          
-          # Upload zip files
-          cd ../release
-          for zip in *.zip; do
-            if [ -f "$zip" ]; then
-              echo "Uploading zip $zip to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
-            fi
-          done
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
@@ -440,6 +399,12 @@ jobs:
       - name: Publish Release
         shell: bash
         run: |
-          gh release edit "v${{ needs.create-release.outputs.app_version }}" --draft=false
+          # Read the release notes file to ensure it's properly formatted
+          cat release_note.txt
+          
+          # Update the release, setting draft to false
+          gh release edit "v${{ needs.create-release.outputs.app_version }}" \
+            --draft=false \
+            --notes-file release_note.txt
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
