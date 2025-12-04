@@ -44,38 +44,31 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-  # Build for all platforms using yarn release
-  build-platforms:
+  # Build for Windows
+  build-windows:
     needs: create-release
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows build
-          - platform: windows-latest
-            targets: "--target x86_64-pc-windows-msvc --target i686-pc-windows-msvc --target aarch64-pc-windows-msvc"
-
-          # Linux build (x86_64 and ARM)
-          - platform: ubuntu-22.04
-            targets: "--target x86_64-unknown-linux-gnu --target aarch64-unknown-linux-gnu --target armv7-unknown-linux-gnueabihf"
-
-          # macOS build
-          - platform: macos-latest
-            targets: "--target x86_64-apple-darwin --target aarch64-apple-darwin"
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Setup Node.js and Rust
+      # Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'yarn'
 
+      # Install nasm and cmake
+      - name: Install dependencies
+        run: |
+          choco install nasm
+          choco install cmake
+
+      # Install Rust with specific targets
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc,i686-pc-windows-msvc,aarch64-pc-windows-msvc
 
       # Rust caching
       - name: Rust cache
@@ -83,13 +76,6 @@ jobs:
         with:
           workspaces: './src-tauri -> target'
           save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      # Install Linux dependencies
-      - name: Install Linux dependencies
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       # Configure Cargo registry
       - name: Configure Cargo registry
@@ -115,32 +101,26 @@ jobs:
           echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
           echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
 
-      # Run yarn release with appropriate targets and publish flag
-      - name: Build and publish with yarn release
+      # Run yarn release with Windows targets
+      - name: Build and publish for Windows
         shell: bash
         run: |
-          yarn && yarn release ${{ matrix.targets }} --publish
+          yarn && yarn release --target x86_64-pc-windows-msvc --target i686-pc-windows-msvc --target aarch64-pc-windows-msvc --publish
 
-      # Create a directory to store all extracted files
-      - name: Prepare extraction directory
-        shell: bash
-        run: mkdir -p release_files
-
-      # Extract all zips for GitHub release
-      - name: Extract zips for GitHub release
+      # Upload files to GitHub release
+      - name: Upload files to GitHub release
         shell: bash
         run: |
+          mkdir -p release_files
+          
+          # Extract and upload files
           for zip in release/*.zip; do
             if [ -f "$zip" ]; then
               echo "Extracting $zip"
               unzip -o "$zip" -d release_files
             fi
           done
-
-      # Upload all extracted files to GitHub release
-      - name: Upload files to GitHub release
-        shell: bash
-        run: |
+          
           cd release_files
           for file in *; do
             if [ -f "$file" ]; then
@@ -149,7 +129,7 @@ jobs:
             fi
           done
           
-          # Also upload the original zip files
+          # Upload zip files
           cd ../release
           for zip in *.zip; do
             if [ -f "$zip" ]; then
@@ -160,9 +140,483 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
+  # Build for macOS
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'yarn'
+
+      # Install nasm and cmake
+      - name: Install dependencies
+        run: |
+          brew install nasm
+          brew install cmake
+
+      # Install Rust with specific targets
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin,aarch64-apple-darwin
+
+      # Rust caching
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Configure Cargo registry
+      - name: Configure Cargo registry
+        shell: bash
+        run: |
+          mkdir -p ~/.cargo
+          cat << EOF > ~/.cargo/config.toml
+          [registries.kellnr]
+          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+          credential-provider = ["cargo:token"]
+          
+          [registry]
+          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+          EOF
+
+      # Set up environment variables
+      - name: Set up build environment
+        shell: bash
+        run: |
+          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
+          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
+
+      # Run yarn release with macOS targets
+      - name: Build and publish for macOS
+        shell: bash
+        run: |
+          yarn && yarn release --target x86_64-apple-darwin --target aarch64-apple-darwin --publish
+
+      # Upload files to GitHub release
+      - name: Upload files to GitHub release
+        shell: bash
+        run: |
+          mkdir -p release_files
+          
+          # Extract and upload files
+          for zip in release/*.zip; do
+            if [ -f "$zip" ]; then
+              echo "Extracting $zip"
+              unzip -o "$zip" -d release_files
+            fi
+          done
+          
+          cd release_files
+          for file in *; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
+            fi
+          done
+          
+          # Upload zip files
+          cd ../release
+          for zip in *.zip; do
+            if [ -f "$zip" ]; then
+              echo "Uploading zip $zip to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  # Build for Linux x86_64
+  build-linux-x64:
+    needs: create-release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'yarn'
+
+      # Install nasm, cmake, and Linux dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm cmake libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # Install Rust with x86_64 target
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      # Rust caching
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Configure Cargo registry
+      - name: Configure Cargo registry
+        shell: bash
+        run: |
+          mkdir -p ~/.cargo
+          cat << EOF > ~/.cargo/config.toml
+          [registries.kellnr]
+          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+          credential-provider = ["cargo:token"]
+          
+          [registry]
+          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+          EOF
+
+      # Set up environment variables
+      - name: Set up build environment
+        shell: bash
+        run: |
+          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
+          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
+
+      # Run yarn release for Linux x86_64
+      - name: Build and publish for Linux x86_64
+        shell: bash
+        run: |
+          yarn && yarn release --target x86_64-unknown-linux-gnu --publish
+
+      # Upload files to GitHub release
+      - name: Upload files to GitHub release
+        shell: bash
+        run: |
+          mkdir -p release_files
+          
+          # Extract and upload files
+          for zip in release/*.zip; do
+            if [ -f "$zip" ]; then
+              echo "Extracting $zip"
+              unzip -o "$zip" -d release_files
+            fi
+          done
+          
+          cd release_files
+          for file in *; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
+            fi
+          done
+          
+          # Upload zip files
+          cd ../release
+          for zip in *.zip; do
+            if [ -f "$zip" ]; then
+              echo "Uploading zip $zip to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  # Build for Linux ARM64 using emulation
+  build-linux-arm64:
+    needs: create-release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: app-version
+        shell: bash
+        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_ENV
+
+      # Cache Rust artifacts
+      - name: Cache rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # Build using ARM64 emulation
+      - name: Build app on emulated ARM64
+        uses: pguyot/arm-runner-action@v2.6.5
+        with:
+          base_image: https://dietpi.com/downloads/images/DietPi_RPi5-ARMv8-Bookworm.img.xz
+          cpu: cortex-a72
+          bind_mount_repository: true
+          image_additional_mb: 10240
+          optimize_image: "no"
+          commands: |
+            # Prevent Rust from complaining about $HOME not matching eid home
+            export HOME=/root
+            # Workaround to CI worker being stuck on Updating crates.io index
+            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+            # Configure Kellnr registry
+            mkdir -p ~/.cargo
+            cat << EOF > ~/.cargo/config.toml
+            [registries.kellnr]
+            index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+            credential-provider = ["cargo:token"]
+            
+            [registry]
+            token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            EOF
+            # Install setup prerequisites
+            apt-get update -y --allow-releaseinfo-change
+            apt-get autoremove -y
+            apt-get install -y --no-install-recommends --no-install-suggests curl nasm cmake libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            . "$HOME/.cargo/env"
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | bash
+            apt-get install -y nodejs
+            npm install -g yarn
+            # Install frontend dependencies
+            cd /app
+            yarn install
+            # Configure environment for publishing
+            export TAURI_SIGNING_PRIVATE_KEY="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+            export CARGO_REGISTRIES_KELLNR_TOKEN="${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            export UPLOAD_API_URL="${{ secrets.UPLOAD_API_URL }}"
+            export UPLOAD_API_KEY="${{ secrets.UPLOAD_API_KEY }}"
+            # Run yarn release with publish flag
+            yarn release --target aarch64-unknown-linux-gnu --publish
+
+      # Upload release files to GitHub
+      - name: Upload files to GitHub release
+        shell: bash
+        run: |
+          # Upload any created DEB files
+          for DEB_FILE in $(find . -name "*.deb"); do
+            if [ -f "$DEB_FILE" ]; then
+              echo "Uploading $DEB_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$DEB_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created RPM files
+          for RPM_FILE in $(find . -name "*.rpm"); do
+            if [ -f "$RPM_FILE" ]; then
+              echo "Uploading $RPM_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$RPM_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created zip files
+          for ZIP_FILE in $(find . -name "*.zip"); do
+            if [ -f "$ZIP_FILE" ]; then
+              echo "Uploading $ZIP_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$ZIP_FILE" --clobber
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  # Build for Linux ARM32 using emulation
+  build-linux-arm32:
+    needs: create-release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: app-version
+        shell: bash
+        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_ENV
+
+      # Cache Rust artifacts
+      - name: Cache rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # Build using ARM32 emulation
+      - name: Build app on emulated ARM32
+        uses: pguyot/arm-runner-action@v2.6.5
+        with:
+          base_image: https://dietpi.com/downloads/images/DietPi_RPi-ARMv7-Bookworm.img.xz
+          cpu: cortex-a53
+          bind_mount_repository: true
+          image_additional_mb: 10240
+          optimize_image: "no"
+          commands: |
+            # Prevent Rust from complaining about $HOME not matching eid home
+            export HOME=/root
+            # Workaround to CI worker being stuck on Updating crates.io index
+            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+            # Configure Kellnr registry
+            mkdir -p ~/.cargo
+            cat << EOF > ~/.cargo/config.toml
+            [registries.kellnr]
+            index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+            credential-provider = ["cargo:token"]
+            
+            [registry]
+            token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            EOF
+            # Install setup prerequisites
+            apt-get update -y --allow-releaseinfo-change
+            apt-get autoremove -y
+            apt-get install -y --no-install-recommends --no-install-suggests curl nasm cmake libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            . "$HOME/.cargo/env"
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | bash
+            apt-get install -y nodejs
+            npm install -g yarn
+            # Install frontend dependencies
+            cd /app
+            yarn install
+            # Configure environment for publishing
+            export TAURI_SIGNING_PRIVATE_KEY="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+            export CARGO_REGISTRIES_KELLNR_TOKEN="${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            export UPLOAD_API_URL="${{ secrets.UPLOAD_API_URL }}"
+            export UPLOAD_API_KEY="${{ secrets.UPLOAD_API_KEY }}"
+            # Run yarn release with publish flag
+            yarn release --target armv7-unknown-linux-gnueabihf --publish
+
+      # Upload release files to GitHub
+      - name: Upload files to GitHub release
+        shell: bash
+        run: |
+          # Upload any created DEB files
+          for DEB_FILE in $(find . -name "*.deb"); do
+            if [ -f "$DEB_FILE" ]; then
+              echo "Uploading $DEB_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$DEB_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created RPM files
+          for RPM_FILE in $(find . -name "*.rpm"); do
+            if [ -f "$RPM_FILE" ]; then
+              echo "Uploading $RPM_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$RPM_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created zip files
+          for ZIP_FILE in $(find . -name "*.zip"); do
+            if [ -f "$ZIP_FILE" ]; then
+              echo "Uploading $ZIP_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$ZIP_FILE" --clobber
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+  # Build for Linux i686 using emulation
+  build-linux-i686:
+    needs: create-release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: app-version
+        shell: bash
+        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_ENV
+
+      # Cache Rust artifacts
+      - name: Cache rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # Build using i686 emulation
+      - name: Build app on emulated i686
+        uses: pguyot/arm-runner-action@v2.6.5
+        with:
+          base_image: https://cdimage.debian.org/cdimage/archive/11.7.0/i386/iso-cd/debian-11.7.0-i386-netinst.iso
+          cpu: core2
+          bind_mount_repository: true
+          image_additional_mb: 10240
+          optimize_image: "no"
+          commands: |
+            # Prevent Rust from complaining about $HOME not matching eid home
+            export HOME=/root
+            # Workaround to CI worker being stuck on Updating crates.io index
+            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+            # Configure Kellnr registry
+            mkdir -p ~/.cargo
+            cat << EOF > ~/.cargo/config.toml
+            [registries.kellnr]
+            index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+            credential-provider = ["cargo:token"]
+            
+            [registry]
+            token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            EOF
+            # Install setup prerequisites
+            apt-get update -y --allow-releaseinfo-change
+            apt-get autoremove -y
+            apt-get install -y --no-install-recommends --no-install-suggests curl nasm cmake libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            . "$HOME/.cargo/env"
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | bash
+            apt-get install -y nodejs
+            npm install -g yarn
+            # Install frontend dependencies
+            cd /app
+            yarn install
+            # Configure environment for publishing
+            export TAURI_SIGNING_PRIVATE_KEY="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
+            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
+            export CARGO_REGISTRIES_KELLNR_TOKEN="${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            export UPLOAD_API_URL="${{ secrets.UPLOAD_API_URL }}"
+            export UPLOAD_API_KEY="${{ secrets.UPLOAD_API_KEY }}"
+            # Run yarn release with publish flag
+            yarn release --target i686-unknown-linux-gnu --publish
+
+      # Upload release files to GitHub
+      - name: Upload files to GitHub release
+        shell: bash
+        run: |
+          # Upload any created DEB files
+          for DEB_FILE in $(find . -name "*.deb"); do
+            if [ -f "$DEB_FILE" ]; then
+              echo "Uploading $DEB_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$DEB_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created RPM files
+          for RPM_FILE in $(find . -name "*.rpm"); do
+            if [ -f "$RPM_FILE" ]; then
+              echo "Uploading $RPM_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$RPM_FILE" --clobber
+            fi
+          done
+          
+          # Upload any created zip files
+          for ZIP_FILE in $(find . -name "*.zip"); do
+            if [ -f "$ZIP_FILE" ]; then
+              echo "Uploading $ZIP_FILE to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$ZIP_FILE" --clobber
+            fi
+          done
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
   # Final step - publish the release after all builds are done
   publish-release:
-    needs: [ create-release, build-platforms ]
+    needs: [ create-release, build-windows, build-macos, build-linux-x64, build-linux-arm64, build-linux-arm32, build-linux-i686 ]
     runs-on: ubuntu-latest
     # Only run if all builds succeeded
     if: success()
