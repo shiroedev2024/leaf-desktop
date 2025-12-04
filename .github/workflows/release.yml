@@ -1,218 +1,174 @@
-# .github/workflows/release.yml
-name: 'Build and Release'
+name: 'Release Tauri App'
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:
-    inputs:
-      publish:
-        description: 'Publish the release'
-        type: boolean
-        default: true
 
 jobs:
-  publish-tauri:
-    permissions:
-      contents: write
+  create-release:
+    runs-on: ubuntu-latest
     outputs:
-      app_version: ${{ steps.tauri_action.outputs.appVersion }}
+      release_id: ${{ steps.create-release.outputs.id }}
+      app_version: ${{ steps.app-version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: app-version
+        shell: bash
+        run: echo "version=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Read release notes
+        id: release-notes
+        shell: bash
+        run: |
+          NOTES=$(cat release_note.txt)
+          NOTES="${NOTES//'%'/'%25'}"
+          NOTES="${NOTES//$'\n'/'%0A'}"
+          NOTES="${NOTES//$'\r'/'%0D'}"
+          echo "notes=$NOTES" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create-release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: `v${{ steps.app-version.outputs.version }}`,
+              name: `Leaf Desktop v${{ steps.app-version.outputs.version }}`,
+              body: `${{ steps.release-notes.outputs.notes }}`,
+              draft: true,
+              prerelease: false
+            });
+            return data.id;
+
+  build-tauri:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: 'macos-latest' # for Arm based macs (M1 and above).
-            args: '--target aarch64-apple-darwin'
-          - platform: 'macos-latest' # for Intel based macs.
+          # Windows builds
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: '--target x86_64-pc-windows-msvc'
+          - platform: windows-latest
+            target: i686-pc-windows-msvc
+            args: '--target i686-pc-windows-msvc'
+          - platform: windows-latest
+            target: aarch64-pc-windows-msvc
+            args: '--target aarch64-pc-windows-msvc'
+
+          # Linux builds
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: '--target x86_64-unknown-linux-gnu'
+          - platform: ubuntu-22.04
+            target: aarch64-unknown-linux-gnu
+            args: '--target aarch64-unknown-linux-gnu'
+          - platform: ubuntu-22.04
+            target: i686-unknown-linux-gnu
+            args: '--target i686-unknown-linux-gnu'
+          - platform: ubuntu-22.04
+            target: armv7-unknown-linux-gnueabihf
+            args: '--target armv7-unknown-linux-gnueabihf'
+
+          # macOS builds
+          - platform: macos-latest
+            target: x86_64-apple-darwin
             args: '--target x86_64-apple-darwin'
-          - platform: 'ubuntu-22.04'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
-          - platform: 'windows-latest'
-            args: '--target i686-pc-windows-msvc' # for 32-bit Windows
-          - platform: 'windows-latest'
-            args: '--target aarch64-pc-windows-msvc' # for ARM64 Windows
-          - platform: 'ubuntu-22.04'
-            args: '--target aarch64-unknown-linux-gnu' # for ARM64 Linux
-          - platform: 'ubuntu-22.04'
-            args: '--target i686-unknown-linux-gnu' # for 32-bit Linux
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: '--target aarch64-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Read release notes
-        id: release-notes
-        run: |
-          NOTES=$(cat release_note.txt)
-          echo "NOTES<<EOF" >> $GITHUB_ENV
-          echo "$NOTES" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: 'lts/*'
           cache: 'yarn'
 
-      - name: Extract target from args
-        id: extract-target
-        run: |
-          if [[ "${{ matrix.args }}" == *"--target "* ]]; then
-            TARGET=$(echo "${{ matrix.args }}" | sed -n 's/.*--target \([^ ]*\).*/\1/p')
-            echo "target=$TARGET" >> $GITHUB_OUTPUT
-          else
-            if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
-              echo "target=x86_64-apple-darwin,aarch64-apple-darwin" >> $GITHUB_OUTPUT
-            else
-              echo "target=" >> $GITHUB_OUTPUT
-            fi
-          fi
+      # Setup cache directories similar to docker-linux.sh
+      - name: Setup Rust cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
 
-      - name: Install Rust stable
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ steps.extract-target.outputs.target }}
+          targets: ${{ matrix.target }}
 
-      - name: Install dependencies (ubuntu only)
-        if: startsWith(matrix.platform, 'ubuntu')
+      # Configure Cargo for Kellnr registry
+      - name: Configure Cargo registry
+        shell: bash
+        run: |
+          mkdir -p ~/.cargo
+          cat << EOF > ~/.cargo/config.toml
+          [registries.kellnr]
+          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+          credential-provider = ["cargo:token"]
+          
+          [registry]
+          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+          EOF
+
+      # Install Linux dependencies
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
+      # Install app dependencies
       - name: Install app dependencies
         run: yarn install
 
-      - name: Setup Cargo environment variables
+      # Build the app using tauri-action
+      - uses: tauri-apps/tauri-action@v1
         env:
-          CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
-        run: |
-          # Just set the environment variable directly, similar to build_tauri.js
-          # This is picked up by Cargo's credential provider
-          echo "CARGO_REGISTRIES_KELLNR_TOKEN=$CARGO_REGISTRIES_KELLNR_TOKEN" >> $GITHUB_ENV
-
-      - name: Set signing environment variables
-        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: |
-          # Create .env file for tauri-action to use
-          echo "TAURI_SIGNING_PRIVATE_KEY='$TAURI_SIGNING_PRIVATE_KEY'" > .env
-          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$TAURI_SIGNING_PRIVATE_KEY_PASSWORD'" >> .env
-
-      - name: Build and publish Tauri app
-        id: tauri_action
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
         with:
-          tagName: v__VERSION__
-          releaseName: 'Release v__VERSION__'
-          releaseBody: ${{ env.NOTES }}
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+          tagName: v${{ needs.create-release.outputs.app_version }}
+          releaseName: "Leaf Desktop v${{ needs.create-release.outputs.app_version }}"
+          releaseBody: "See attached assets for installation packages."
+          releaseDraft: true
+          prerelease: false
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
+          uploadUpdaterSignatures: true
 
-      - name: Save artifacts for publishing
-        if: matrix.args != ''
-        uses: actions/upload-artifact@v4
-        with:
-          name: artifacts-${{ matrix.platform }}-${{ matrix.args }}
-          path: |
-            src-tauri/target/*/release/bundle/**/*.{exe,msi,deb,rpm,app.tar.gz,dmg,AppImage}
-            src-tauri/target/*/release/bundle/**/*.{sig,hash}
-          retention-days: 3
-
-      # No cleanup needed as we're using environment variables
-      # which automatically expire at the end of the workflow run
-
-  publish-to-custom-api:
-    needs: [ publish-tauri ]
+  publish-release:
+    needs: [ create-release, build-tauri ]
     runs-on: ubuntu-latest
+    # Only run if all builds succeeded
+    if: success()
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - name: Publish Release
+        uses: actions/github-script@v6
         with:
-          path: artifacts
-
-      - name: Extract and organize release files
-        run: |
-          mkdir -p release_files
-          # Extract all files from artifacts directory
-          find artifacts -type f -not -path "*/\.*" | while read file; do
-            # Get the basename of the file
-            filename=$(basename "$file")
-            # Copy to release_files directory
-            cp "$file" "release_files/$filename"
-          done
-          
-          # List all found files
-          echo "Files for upload:"
-          ls -la release_files/
-
-      - name: Upload to custom API
-        env:
-          UPLOAD_API_URL: ${{ secrets.UPLOAD_API_URL }}
-          UPLOAD_API_KEY: ${{ secrets.UPLOAD_API_KEY }}
-          VERSION: ${{ needs.publish-tauri.outputs.app_version }}
-        run: |
-          # Find and process all Windows executables
-          windows_files=$(find release_files -name "*.exe" -o -name "*.msi")
-          if [ ! -z "$windows_files" ]; then
-            # Create a windows zip
-            mkdir -p windows
-            cp $windows_files windows/
-            zip -r windows.zip windows/
-          
-            # Upload Windows release
-            curl -X POST "$UPLOAD_API_URL" \
-              -H "X-API-Key: $UPLOAD_API_KEY" \
-              -F "zip=@windows.zip" \
-              -F "platform=windows" \
-              -F "version=$VERSION" \
-              -F "source=github-actions" \
-              -F "change_log[0][lang_code]=en" \
-              -F "change_log[0][text]=$(cat release_note.txt)"
-          fi
-          
-          # Find and process all macOS packages
-          macos_files=$(find release_files -name "*.app.tar.gz" -o -name "*.dmg")
-          if [ ! -z "$macos_files" ]; then
-            # Create a macOS zip
-            mkdir -p macos
-            cp $macos_files macos/
-            zip -r macos.zip macos/
-          
-            # Upload macOS release
-            curl -X POST "$UPLOAD_API_URL" \
-              -H "X-API-Key: $UPLOAD_API_KEY" \
-              -F "zip=@macos.zip" \
-              -F "platform=macos" \
-              -F "version=$VERSION" \
-              -F "source=github-actions" \
-              -F "change_log[0][lang_code]=en" \
-              -F "change_log[0][text]=$(cat release_note.txt)"
-          fi
-          
-          # Find and process all Linux packages
-          linux_files=$(find release_files -name "*.deb" -o -name "*.rpm" -o -name "*.AppImage")
-          if [ ! -z "$linux_files" ]; then
-            # Create a Linux zip
-            mkdir -p linux
-            cp $linux_files linux/
-            zip -r linux.zip linux/
-          
-            # Upload Linux release
-            curl -X POST "$UPLOAD_API_URL" \
-              -H "X-API-Key: $UPLOAD_API_KEY" \
-              -F "zip=@linux.zip" \
-              -F "platform=linux" \
-              -F "version=$VERSION" \
-              -F "source=github-actions" \
-              -F "change_log[0][lang_code]=en" \
-              -F "change_log[0][text]=$(cat release_note.txt)"
-          fi
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false
+            });
