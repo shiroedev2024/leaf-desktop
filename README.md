@@ -14,3 +14,21 @@ Since TypeScript cannot handle type information for `.vue` imports, they are shi
 2. Reload the VS Code window by running `Developer: Reload Window` from the command palette.
 
 You can learn more about Take Over mode [here](https://github.com/johnsoncodehk/volar/discussions/471).
+
+## Cargo Registry Configuration
+
+This project requires a custom Cargo registry configuration to access private dependencies.
+
+1. Create a `config.toml` file in the project root with the following content:
+
+```toml
+[registries.kellnr]
+index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+credential-provider = ["cargo:token"]
+token = "<YOUR_TOKEN_HERE>"
+```
+
+2. Replace `<YOUR_TOKEN_HERE>` with your actual access token.
+
+This file is automatically mounted inside the Docker container when using the provided `docker.sh` script. It is also
+added to `.gitignore` to prevent accidentally committing your token.

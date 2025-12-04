@@ -1,87 +1,76 @@
 {
-  "build": {
-    "beforeDevCommand": "yarn dev",
-    "beforeBuildCommand": "yarn build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist"
-  },
-  "package": {
-    "productName": "leaf-desktop",
-    "version": "0.0.7"
-  },
-  "tauri": {
-    "allowlist": {
-      "all": false,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "dialog": {
-        "all": false,
-        "ask": false,
-        "confirm": false,
-        "message": true,
-        "open": false,
-        "save": false
-      },
-      "window": {
-        "all": false,
-        "center": false,
-        "close": true,
-        "create": false,
-        "hide": false,
-        "maximize": false,
-        "minimize": false,
-        "print": false,
-        "requestUserAttention": false,
-        "setAlwaysOnTop": false,
-        "setClosable": false,
-        "setContentProtected": false,
-        "setCursorGrab": false,
-        "setCursorIcon": false,
-        "setCursorPosition": false,
-        "setCursorVisible": false,
-        "setDecorations": false,
-        "setFocus": false,
-        "setFullscreen": false,
-        "setIcon": false,
-        "setIgnoreCursorEvents": false,
-        "setMaxSize": false,
-        "setMaximizable": false,
-        "setMinSize": false,
-        "setMinimizable": false,
-        "setPosition": false,
-        "setResizable": false,
-        "setSize": false,
-        "setSkipTaskbar": false,
-        "setTitle": false,
-        "show": false,
-        "startDragging": false,
-        "unmaximize": false,
-        "unminimize": false
-      }
+  "$schema": "https://schema.tauri.app/config/2",
+  "app": {
+    "security": {
+      "capabilities": [
+        "migrated"
+      ],
+      "csp": null
     },
     "windows": [
       {
-        "title": "leaf-desktop",
-        "width": 800,
-        "height": 600
+        "center": true,
+        "fullscreen": false,
+        "height": 620,
+        "minHeight": 520,
+        "minWidth": 520,
+        "title": "Leaf VPN",
+        "width": 940
       }
+    ]
+  },
+  "build": {
+    "beforeBuildCommand": "yarn build",
+    "beforeDevCommand": "yarn dev",
+    "devUrl": "http://localhost:1420",
+    "frontendDist": "../dist"
+  },
+  "bundle": {
+    "active": true,
+    "category": "Utilities",
+    "createUpdaterArtifacts": true,
+    "externalBin": [
+      "./bin/leaf-ipc"
     ],
-    "security": {
-      "csp": null
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "longDescription": "A VPN client based on Leaf Proxy.",
+    "publisher": "Lite VPN",
+    "shortDescription": "A VPN client based on Leaf Proxy.",
+    "targets": [
+      "deb",
+      "rpm",
+      "app",
+      "nsis"
+    ]
+  },
+  "identifier": "com.github.shiroedev2024.leaf.desktop",
+  "mainBinaryName": "leaf-desktop",
+  "plugins": {
+    "updater": {
+      "endpoints": [
+        "https://obliging-lemming-stirred.loca.lt/downloads/tauri/{{target}}/{{arch}}/{{current_version}}",
+        "https://litevpn.top/downloads/tauri/{{target}}/{{arch}}/{{current_version}}"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3NzM4MTRBNzI0MTU3MjYKUldRbVYwRnlTb0Z6TjdFdkE5TTdqM0YrczNUM2lBcCt5dEhva1VsUVMzTTlCK3NGRGJPeGJLS2EK",
+      "windows": {
+        "installMode": "passive"
+      },
+      "dangerousInsecureTransportProtocol": false
     },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.github.shiroedev2024.leaf.desktop",
-      "icon": [
-        "icons/32x32.png",
-        "icons/128x128.png",
-        "icons/128x128@2x.png",
-        "icons/icon.icns",
-        "icons/icon.ico"
-      ]
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "leafvpn"
+        ]
+      }
     }
-  }
+  },
+  "productName": "Leaf VPN",
+  "version": "1.6.0"
 }
