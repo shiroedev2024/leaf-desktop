@@ -92,10 +92,11 @@ jobs:
           # Setup secure Cargo registry configuration
           mkdir -p ~/.cargo
           echo '[registries.kellnr]' >> ~/.cargo/config.toml
-          echo 'index = "https://kellnr.io/index"' >> ~/.cargo/config.toml
+          echo 'index = "sparse+https://cargo.surfshield.org/api/v1/crates/"' >> ~/.cargo/config.toml 
           echo 'token = "$CARGO_REGISTRIES_KELLNR_TOKEN"' >> ~/.cargo/config.toml
           # Make config readable only by current user
           chmod 600 ~/.cargo/config.toml
+          cat ~/.cargo/config.toml
 
       - name: Set signing environment variables
         env:
