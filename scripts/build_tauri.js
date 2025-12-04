@@ -14,7 +14,7 @@ import { config } from 'dotenv';
 import archiver from 'archiver';
 import axios from 'axios';
 import FormData from 'form-data';
-import glob from 'glob';
+import { glob } from 'glob';
 
 config();
 
