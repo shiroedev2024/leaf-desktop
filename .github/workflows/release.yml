@@ -97,10 +97,20 @@ jobs:
           node-version: 'lts/*'
           cache: 'yarn'
       
+      - name: Extract target from args
+        id: extract-target
+        run: |
+          if [[ "${{ matrix.args }}" == *"--target "* ]]; then
+            TARGET=$(echo "${{ matrix.args }}" | sed -n 's/.*--target \([^ ]*\).*/\1/p')
+            echo "target=$TARGET" >> $GITHUB_OUTPUT
+          else
+            echo "target=" >> $GITHUB_OUTPUT
+          fi
+      
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ contains(matrix.args, '--target') && matrix.args | replace: '--target ', '' || '' }}
+          targets: ${{ steps.extract-target.outputs.target }}
       
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-latest'
