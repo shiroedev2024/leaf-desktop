@@ -2,21 +2,9 @@
 
 ![Leaf VPN](src-tauri/icons/icon.png)
 
-## Download
+## Quick Links
 
-| Platform               | Architecture  | Download                                                                                                                           |
-|------------------------|---------------|------------------------------------------------------------------------------------------------------------------------------------|
-| Windows                | x64 (64-bit)  | [Download Installer (.exe)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN_1.6.1_x64-setup.exe)   |
-| Windows                | x86 (32-bit)  | [Download Installer (.exe)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN_1.6.1_x86-setup.exe)   |
-| Windows                | ARM64         | [Download Installer (.exe)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN_1.6.1_arm64-setup.exe) |
-| macOS                  | Intel         | [Download App (.tar.gz)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf_VPN_1.6.1_x64.app.tar.gz)     |
-| macOS                  | Apple Silicon | [Download App (.tar.gz)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf_VPN_1.6.1_arm64.app.tar.gz)   |
-| Linux (Debian/Ubuntu)  | x64           | [Download Package (.deb)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN_1.6.1_amd64.deb)         |
-| Linux (Debian/Ubuntu)  | ARM64         | [Download Package (.deb)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN_1.6.1_arm64.deb)         |
-| Linux (Red Hat/Fedora) | x64           | [Download Package (.rpm)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN-1.6.1-1.x86_64.rpm)      |
-| Linux (Red Hat/Fedora) | ARM64         | [Download Package (.rpm)](https://github.com/shiroedev2024/leaf-desktop/releases/latest/download/Leaf.VPN-1.6.1-1.aarch64.rpm)     |
-
-[View all releases →](https://github.com/shiroedev2024/leaf-desktop/releases)
+[📦 Download Latest Version](https://github.com/shiroedev2024/leaf-desktop/releases/latest)
 
 Leaf VPN is a cross-platform desktop VPN client built with Tauri, Vue 3, and the leaf-sdk for secure and private
 internet access. This application provides a user-friendly interface for managing VPN connections through the powerful
