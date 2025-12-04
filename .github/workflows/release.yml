@@ -20,14 +20,14 @@ jobs:
       version: ${{ steps.app-version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Get app version
         id: app-version
         run: |
           VERSION=$(cat src-tauri/tauri.conf.json | grep -o '"version": "[^"]*"' | cut -d'"' -f4)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "App version: $VERSION"
-      
+
       - name: Read release notes
         id: release-notes
         run: |
@@ -35,14 +35,14 @@ jobs:
           echo "NOTES<<EOF" >> $GITHUB_ENV
           echo "$NOTES" >> $GITHUB_ENV
           echo "EOF" >> $GITHUB_ENV
-      
+
       - name: Generate release tag
         id: tag
         run: |
           TAG="v${{ steps.app-version.outputs.version }}-$(date +'%Y%m%d-%H%M%S')"
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Generated tag: $TAG"
-      
+
       - name: Create Release
         id: create-release
         uses: actions/github-script@v7
@@ -85,18 +85,18 @@ jobs:
             args: '--target x86_64-apple-darwin'
           - platform: macos-latest
             args: '--target aarch64-apple-darwin'
-    
+
     runs-on: ${{ matrix.platform }}
-    
+
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 'lts/*'
           cache: 'yarn'
-      
+
       - name: Extract target from args
         id: extract-target
         run: |
@@ -106,21 +106,21 @@ jobs:
           else
             echo "target=" >> $GITHUB_OUTPUT
           fi
-      
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ steps.extract-target.outputs.target }}
-      
+
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-latest'
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-      
+
       - name: Install app dependencies
         run: yarn install
-      
+
       - name: Set environment variables
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -131,15 +131,15 @@ jobs:
           echo "TAURI_SIGNING_PRIVATE_KEY='$TAURI_SIGNING_PRIVATE_KEY'" > .env
           echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$TAURI_SIGNING_PRIVATE_KEY_PASSWORD'" >> .env
           echo "CARGO_REGISTRIES_KELLNR_TOKEN='$CARGO_REGISTRIES_KELLNR_TOKEN'" >> .env
-      
+
       - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v1
+        uses: tauri-apps/tauri-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
-          
+
       - name: Save artifacts for publishing
         if: matrix.args != ''
         uses: actions/upload-artifact@v4
@@ -155,12 +155,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
+
       - name: Extract and organize release files
         run: |
           mkdir -p release_files
@@ -175,7 +175,7 @@ jobs:
           # List all found files
           echo "Files for upload:"
           ls -la release_files/
-      
+
       - name: Upload to custom API
         env:
           UPLOAD_API_URL: ${{ secrets.UPLOAD_API_URL }}
@@ -189,7 +189,7 @@ jobs:
             mkdir -p windows
             cp $windows_files windows/
             zip -r windows.zip windows/
-            
+          
             # Upload Windows release
             curl -X POST "$UPLOAD_API_URL" \
               -H "X-API-Key: $UPLOAD_API_KEY" \
@@ -208,7 +208,7 @@ jobs:
             mkdir -p macos
             cp $macos_files macos/
             zip -r macos.zip macos/
-            
+          
             # Upload macOS release
             curl -X POST "$UPLOAD_API_URL" \
               -H "X-API-Key: $UPLOAD_API_KEY" \
@@ -227,7 +227,7 @@ jobs:
             mkdir -p linux
             cp $linux_files linux/
             zip -r linux.zip linux/
-            
+          
             # Upload Linux release
             curl -X POST "$UPLOAD_API_URL" \
               -H "X-API-Key: $UPLOAD_API_KEY" \
