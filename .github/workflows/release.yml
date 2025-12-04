@@ -85,16 +85,26 @@ jobs:
       - name: Install app dependencies
         run: yarn install
 
-      - name: Set environment variables
+      - name: Setup custom KELLNR registry
+        env:
+          CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
+        run: |
+          # Setup secure Cargo registry configuration
+          mkdir -p ~/.cargo
+          echo '[registries.kellnr]' >> ~/.cargo/config.toml
+          echo 'index = "https://kellnr.io/index"' >> ~/.cargo/config.toml
+          echo 'token = "$CARGO_REGISTRIES_KELLNR_TOKEN"' >> ~/.cargo/config.toml
+          # Make config readable only by current user
+          chmod 600 ~/.cargo/config.toml
+
+      - name: Set signing environment variables
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
         run: |
           # Create .env file for tauri-action to use
           echo "TAURI_SIGNING_PRIVATE_KEY='$TAURI_SIGNING_PRIVATE_KEY'" > .env
           echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD='$TAURI_SIGNING_PRIVATE_KEY_PASSWORD'" >> .env
-          echo "CARGO_REGISTRIES_KELLNR_TOKEN='$CARGO_REGISTRIES_KELLNR_TOKEN'" >> .env
 
       - name: Build and publish Tauri app
         id: tauri_action
@@ -118,6 +128,14 @@ jobs:
             src-tauri/target/*/release/bundle/**/*.{exe,msi,deb,rpm,app.tar.gz,dmg,AppImage}
             src-tauri/target/*/release/bundle/**/*.{sig,hash}
           retention-days: 3
+
+      - name: Remove KELLNR registry configuration
+        if: always()
+        run: |
+          # Clean up the custom registry for security
+          if [ -f ~/.cargo/config.toml ]; then
+            rm ~/.cargo/config.toml
+          fi
 
   publish-to-custom-api:
     needs: [ publish-tauri ]
