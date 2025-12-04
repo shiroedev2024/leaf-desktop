@@ -33,6 +33,7 @@ jobs:
         id: create-release
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.RELEASE_TOKEN }}
           script: |
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
@@ -164,7 +165,7 @@ jobs:
       - name: Publish Release
         uses: actions/github-script@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.RELEASE_TOKEN }}
           script: |
             await github.rest.repos.updateRelease({
               owner: context.repo.owner,
