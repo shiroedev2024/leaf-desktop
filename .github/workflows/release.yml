@@ -47,7 +47,8 @@ jobs:
             });
             return data.id;
 
-  build-tauri:
+  # Standard builds for Windows, macOS, and x86_64 Linux
+  build-standard:
     needs: create-release
     strategy:
       fail-fast: false
@@ -64,19 +65,10 @@ jobs:
             target: aarch64-pc-windows-msvc
             args: '--target aarch64-pc-windows-msvc'
 
-          # Linux builds
+          # Standard Linux build (x86_64 only)
           - platform: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: '--target x86_64-unknown-linux-gnu'
-          - platform: ubuntu-22.04
-            target: aarch64-unknown-linux-gnu
-            args: '--target aarch64-unknown-linux-gnu'
-          - platform: ubuntu-22.04
-            target: i686-unknown-linux-gnu
-            args: '--target i686-unknown-linux-gnu'
-          - platform: ubuntu-22.04
-            target: armv7-unknown-linux-gnueabihf
-            args: '--target armv7-unknown-linux-gnueabihf'
+            args: ''
 
           # macOS builds
           - platform: macos-latest
@@ -134,26 +126,163 @@ jobs:
         run: yarn install
 
       # Build the app using tauri-action v0 for Tauri 2 support
+      # Only building the formats you use in your tauri.conf.json: deb/rpm for Linux, app for macOS, nsis for Windows
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} --bundles deb,rpm,app,nsis,updater
           tagName: v${{ needs.create-release.outputs.app_version }}
           releaseName: "Leaf Desktop v${{ needs.create-release.outputs.app_version }}"
           releaseBody: "See attached assets for installation packages."
           releaseDraft: true
           prerelease: false
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           updaterJsonPreferNsis: true
-          uploadUpdaterSignatures: true
 
+  # Build for Linux ARM architectures using emulation
+  build-linux-arm:
+    needs: create-release
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            cpu: cortex-a72
+            base_image: https://dietpi.com/downloads/images/DietPi_RPi5-ARMv8-Bookworm.img.xz
+            target: aarch64-unknown-linux-gnu
+            deb: arm64
+            rpm: aarch64
+          - arch: armv7l
+            cpu: cortex-a53
+            base_image: https://dietpi.com/downloads/images/DietPi_RPi-ARMv7-Bookworm.img.xz
+            target: armv7-unknown-linux-gnueabihf
+            deb: armhf
+            rpm: arm
+          - arch: i686
+            cpu: core2
+            base_image: https://cdimage.debian.org/cdimage/archive/11.7.0/i386/iso-cd/debian-11.7.0-i386-netinst.iso
+            target: i686-unknown-linux-gnu
+            deb: i386
+            rpm: i686
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get app version
+        id: app-version
+        shell: bash
+        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_ENV
+
+      # Cache Rust artifacts
+      - name: Cache rust build artifacts
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          cache-on-failure: true
+
+      # Build using ARM emulation
+      - name: Build app on emulated ARM
+        uses: pguyot/arm-runner-action@v2.6.5
+        with:
+          base_image: ${{ matrix.base_image }}
+          cpu: ${{ matrix.cpu }}
+          bind_mount_repository: true
+          image_additional_mb: 10240
+          optimize_image: "no"
+          commands: |
+            # Prevent Rust from complaining about $HOME not matching eid home
+            export HOME=/root
+            # Workaround to CI worker being stuck on Updating crates.io index
+            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
+            # Configure Kellnr registry
+            mkdir -p ~/.cargo
+            cat << EOF > ~/.cargo/config.toml
+            [registries.kellnr]
+            index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+            credential-provider = ["cargo:token"]
+            
+            [registry]
+            token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+            EOF
+            # Install setup prerequisites
+            apt-get update -y --allow-releaseinfo-change
+            apt-get autoremove -y
+            apt-get install -y --no-install-recommends --no-install-suggests curl libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
+            curl https://sh.rustup.rs -sSf | sh -s -- -y
+            . "$HOME/.cargo/env"
+            curl -fsSL https://deb.nodesource.com/setup_lts.x | bash
+            apt-get install -y nodejs
+            npm install -g yarn
+            # Install frontend dependencies
+            yarn install
+            # Build the application
+            # Skip AppImage - only build DEB and RPM packages
+            yarn tauri build --target ${{ matrix.target }} --bundles deb,rpm --verbose
+
+      # Upload DEB bundle to the release
+      - name: Upload DEB bundle to release
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { repo } = context.repo;
+            
+            // Check both possible naming patterns based on your tauri.conf.json productName
+            let debFile = `src-tauri/target/release/bundle/deb/Leaf VPN_${process.env.APP_VERSION}_${{ matrix.deb }}.deb`;
+            if (!fs.existsSync(debFile)) {
+              debFile = `src-tauri/target/release/bundle/deb/leaf-vpn_${process.env.APP_VERSION}_${{ matrix.deb }}.deb`;
+            }
+            if (fs.existsSync(debFile)) {
+              console.log(`Uploading ${debFile} to release`);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo,
+                release_id: ${{ needs.create-release.outputs.release_id }},
+                name: debFile.split('/').pop(),
+                data: fs.readFileSync(debFile)
+              });
+            } else {
+              console.log(`DEB file not found: ${debFile}`);
+            }
+
+      # Upload RPM bundle to the release
+      - name: Upload RPM bundle to release
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.RELEASE_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const { repo } = context.repo;
+            
+            // Check both possible naming patterns based on your tauri.conf.json productName
+            let rpmFile = `src-tauri/target/release/bundle/rpm/Leaf VPN-${process.env.APP_VERSION}-1.${{ matrix.rpm }}.rpm`;
+            if (!fs.existsSync(rpmFile)) {
+              rpmFile = `src-tauri/target/release/bundle/rpm/leaf-vpn-${process.env.APP_VERSION}-1.${{ matrix.rpm }}.rpm`;
+            }
+            if (fs.existsSync(rpmFile)) {
+              console.log(`Uploading ${rpmFile} to release`);
+              await github.rest.repos.uploadReleaseAsset({
+                owner: context.repo.owner,
+                repo,
+                release_id: ${{ needs.create-release.outputs.release_id }},
+                name: rpmFile.split('/').pop(),
+                data: fs.readFileSync(rpmFile)
+              });
+            } else {
+              console.log(`RPM file not found: ${rpmFile}`);
+            }
+
+
+
+  # Final step - publish the release after all builds are done
   publish-release:
-    needs: [ create-release, build-tauri ]
+    needs: [ create-release, build-standard, build-linux-arm ]
     runs-on: ubuntu-latest
     # Only run if all builds succeeded
     if: success()
