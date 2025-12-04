@@ -435,6 +435,8 @@ jobs:
     # Only run if all builds succeeded
     if: success()
     steps:
+      - uses: actions/checkout@v4
+
       - name: Publish Release
         shell: bash
         run: |

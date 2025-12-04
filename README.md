@@ -1,34 +1,103 @@
-# Tauri + Vue 3 + TypeScript
+# Leaf VPN Desktop Client
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+![Leaf VPN](src-tauri/icons/icon.png)
 
-## Recommended IDE Setup
+Leaf VPN is a cross-platform desktop VPN client built with Tauri, Vue 3, and the leaf-sdk for secure and private
+internet access. This application provides a user-friendly interface for managing VPN connections through the powerful
+Leaf proxy engine.
 
-- [VS Code](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## Features
 
-## Type Support For `.vue` Imports in TS
+- **Simple, Intuitive Interface** - Easy-to-use dashboard for managing your VPN connections
+- **Cross-Platform Support** - Works on Windows, macOS, and Linux
+- **Subscription Management** - Easily update and manage your VPN subscription
+- **Multiple Outbound Connections** - Choose from available outbound servers
+- **Auto-Reload Capability** - Automatically reconnect when network changes
+- **Deep Linking Support** - Direct subscription integration via `leafvpn://` protocol
+- **Automatic Updates** - Stay current with the latest features and security patches
+- **Traffic Monitoring** - Track your VPN usage
+- **IPv6 Support** - Full IPv6 compatibility with toggle options
+- **Customizable Settings** - Adjust network preferences, logging options, and more
 
-Since TypeScript cannot handle type information for `.vue` imports, they are shimmed to be a generic Vue component type by default. In most cases this is fine if you don't really care about component prop types outside of templates. However, if you wish to get actual prop types in `.vue` imports (for example to get props validation when using manual `h(...)` calls), you can enable Volar's Take Over mode by following these steps:
+## System Requirements
 
-1. Run `Extensions: Show Built-in Extensions` from VS Code's command palette, look for `TypeScript and JavaScript Language Features`, then right click and select `Disable (Workspace)`. By default, Take Over mode will enable itself if the default TypeScript extension is disabled.
-2. Reload the VS Code window by running `Developer: Reload Window` from the command palette.
+- **Windows**: Windows 10 or newer
+- **macOS**: macOS 10.15 (Catalina) or newer
+- **Linux**: Most modern distributions with `libwebkit2gtk` support
 
-You can learn more about Take Over mode [here](https://github.com/johnsoncodehk/volar/discussions/471).
+## Development
 
-## Cargo Registry Configuration
+This project is built using the following technologies:
 
-This project requires a custom Cargo registry configuration to access private dependencies.
+- **[Tauri](https://tauri.app/)** - Lightweight, secure desktop application framework
+- **[Vue 3](https://vuejs.org/)** - Progressive JavaScript framework
+- **[TypeScript](https://www.typescriptlang.org/)** - Typed JavaScript
+- **[Tailwind CSS](https://tailwindcss.com/)** - Utility-first CSS framework
+- **[Rust](https://www.rust-lang.org/)** - Backend implementation language
+- **Leaf SDK** - VPN client implementation
 
-1. Create a `config.toml` file in the project root with the following content:
+### Project Structure
+
+- `src/` - Vue frontend application
+    - `api/` - API client interfaces
+    - `components/` - Reusable Vue components
+    - `page/` - Main application screens
+    - `store/` - State management using Pinia
+    - `types/` - TypeScript type definitions
+- `src-tauri/` - Rust backend application
+    - `src/` - Rust source code
+    - `bin/` - Binary executables for the Leaf IPC service
+
+## Setup for Development
+
+### Prerequisites
+
+- Node.js (v16 or newer)
+- Yarn
+- Rust toolchain (rustc, cargo)
+- Platform-specific build dependencies for Tauri
+
+### Cargo Registry Configuration
+
+This project uses a custom Cargo registry for accessing leaf-sdk and other dependencies. Create a `config.toml` file in
+your Cargo directory with:
 
 ```toml
 [registries.kellnr]
 index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
 credential-provider = ["cargo:token"]
-token = "<YOUR_TOKEN_HERE>"
 ```
 
-2. Replace `<YOUR_TOKEN_HERE>` with your actual access token.
+### Installation Steps
 
-This file is automatically mounted inside the Docker container when using the provided `docker.sh` script. It is also
-added to `.gitignore` to prevent accidentally committing your token.
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   yarn install
+   ```
+3. Run the development server:
+   ```bash
+   yarn tauri dev
+   ```
+
+### Building for Production
+
+To create a production build:
+
+```bash
+yarn tauri build
+```
+
+This will generate platform-specific installers in the `src-tauri/target/release/bundle` directory.
+
+## License
+
+This project is licensed under the Apache License 2.0. See the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 Shiroe Dev <shiroedev@proton.me> and the Apache Software Foundation
+
+## Acknowledgements
+
+- [Leaf Proxy](https://github.com/eycorsican/leaf) - The underlying proxy engine
+- [Tauri](https://tauri.app/) - For providing a secure, lightweight desktop application framework
+- All the amazing open-source libraries that make this project possible

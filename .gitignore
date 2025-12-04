@@ -28,4 +28,3 @@ dist-ssr
 # Other
 release
 .env
-.cache
