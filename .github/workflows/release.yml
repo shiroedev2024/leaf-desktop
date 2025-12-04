@@ -332,95 +332,97 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-  # Build for Linux ARM64 using emulation
+  # Build for Linux ARM64 using native ARM runners
   build-linux-arm64:
     needs: create-release
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-22.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Get app version
-        id: app-version
-        shell: bash
-        run: echo "APP_VERSION=$(node -p "require('./src-tauri/tauri.conf.json').version")" >> $GITHUB_ENV
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'yarn'
 
-      # Cache Rust artifacts
-      - name: Cache rust build artifacts
+      # Install nasm, cmake, and Linux dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nasm cmake libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      # Install Rust with aarch64 target
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      # Rust caching
+      - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
-          cache-on-failure: true
+          workspaces: './src-tauri -> target'
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      # Build using ARM64 emulation
-      - name: Build app on emulated ARM64
-        uses: pguyot/arm-runner-action@v2.6.5
-        with:
-          base_image: https://dietpi.com/downloads/images/DietPi_RPi5-ARMv8-Bookworm.img.xz
-          cpu: cortex-a72
-          bind_mount_repository: true
-          image_additional_mb: 10240
-          optimize_image: "no"
-          commands: |
-            # Prevent Rust from complaining about $HOME not matching eid home
-            export HOME=/root
-            # Workaround to CI worker being stuck on Updating crates.io index
-            export CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse
-            # Configure Kellnr registry
-            mkdir -p ~/.cargo
-            cat << EOF > ~/.cargo/config.toml
-            [registries.kellnr]
-            index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-            credential-provider = ["cargo:token"]
-            
-            [registry]
-            token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
-            EOF
-            # Install setup prerequisites
-            apt-get update -y --allow-releaseinfo-change
-            apt-get autoremove -y
-            apt-get install -y --no-install-recommends --no-install-suggests curl nasm cmake libwebkit2gtk-4.1-dev build-essential libssl-dev libgtk-3-dev libappindicator3-dev librsvg2-dev patchelf libfuse2 file
-            curl https://sh.rustup.rs -sSf | sh -s -- -y
-            . "$HOME/.cargo/env"
-            curl -fsSL https://deb.nodesource.com/setup_lts.x | bash
-            apt-get install -y nodejs
-            npm install -g yarn
-            # Install frontend dependencies
-            cd /app
-            yarn install
-            # Configure environment for publishing
-            export TAURI_SIGNING_PRIVATE_KEY="${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}"
-            export TAURI_SIGNING_PRIVATE_KEY_PASSWORD="${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}"
-            export CARGO_REGISTRIES_KELLNR_TOKEN="${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
-            export UPLOAD_API_URL="${{ secrets.UPLOAD_API_URL }}"
-            export UPLOAD_API_KEY="${{ secrets.UPLOAD_API_KEY }}"
-            # Run yarn release with publish flag
-            yarn release --target aarch64-unknown-linux-gnu --publish
+      # Configure Cargo registry
+      - name: Configure Cargo registry
+        shell: bash
+        run: |
+          mkdir -p ~/.cargo
+          cat << EOF > ~/.cargo/config.toml
+          [registries.kellnr]
+          index = "sparse+https://cargo.surfshield.org/api/v1/crates/"
+          credential-provider = ["cargo:token"]
+          
+          [registry]
+          token = "${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}"
+          EOF
 
-      # Upload release files to GitHub
+      # Set up environment variables
+      - name: Set up build environment
+        shell: bash
+        run: |
+          echo "TAURI_SIGNING_PRIVATE_KEY=${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}" >> $GITHUB_ENV
+          echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}" >> $GITHUB_ENV
+          echo "CARGO_REGISTRIES_KELLNR_TOKEN=${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_URL=${{ secrets.UPLOAD_API_URL }}" >> $GITHUB_ENV
+          echo "UPLOAD_API_KEY=${{ secrets.UPLOAD_API_KEY }}" >> $GITHUB_ENV
+
+      # Run yarn release for Linux ARM64
+      - name: Build and publish for Linux ARM64
+        shell: bash
+        run: |
+          yarn && yarn release --target aarch64-unknown-linux-gnu --publish
+
+      # Upload files to GitHub release
       - name: Upload files to GitHub release
         shell: bash
         run: |
-          # Upload any created DEB files
-          for DEB_FILE in $(find . -name "*.deb"); do
-            if [ -f "$DEB_FILE" ]; then
-              echo "Uploading $DEB_FILE to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$DEB_FILE" --clobber
+          mkdir -p release_files
+          
+          # Extract and upload files
+          for zip in release/*.zip; do
+            if [ -f "$zip" ]; then
+              echo "Extracting $zip"
+              unzip -o "$zip" -d release_files
             fi
           done
           
-          # Upload any created RPM files
-          for RPM_FILE in $(find . -name "*.rpm"); do
-            if [ -f "$RPM_FILE" ]; then
-              echo "Uploading $RPM_FILE to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$RPM_FILE" --clobber
+          cd release_files
+          for file in *; do
+            if [ -f "$file" ]; then
+              echo "Uploading $file to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$file" --clobber
             fi
           done
           
-          # Upload any created zip files
-          for ZIP_FILE in $(find . -name "*.zip"); do
-            if [ -f "$ZIP_FILE" ]; then
-              echo "Uploading $ZIP_FILE to GitHub release"
-              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$ZIP_FILE" --clobber
+          # Upload zip files
+          cd ../release
+          for zip in *.zip; do
+            if [ -f "$zip" ]; then
+              echo "Uploading zip $zip to GitHub release"
+              gh release upload "v${{ needs.create-release.outputs.app_version }}" "$zip" --clobber
             fi
           done
         env:
