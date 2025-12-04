@@ -85,18 +85,13 @@ jobs:
       - name: Install app dependencies
         run: yarn install
 
-      - name: Setup custom KELLNR registry
+      - name: Setup Cargo environment variables
         env:
           CARGO_REGISTRIES_KELLNR_TOKEN: ${{ secrets.CARGO_REGISTRIES_KELLNR_TOKEN }}
         run: |
-          # Setup secure Cargo registry configuration
-          mkdir -p ~/.cargo
-          echo '[registries.kellnr]' >> ~/.cargo/config.toml
-          echo 'index = "sparse+https://cargo.surfshield.org/api/v1/crates/"' >> ~/.cargo/config.toml 
-          echo 'token = "$CARGO_REGISTRIES_KELLNR_TOKEN"' >> ~/.cargo/config.toml
-          # Make config readable only by current user
-          chmod 600 ~/.cargo/config.toml
-          cat ~/.cargo/config.toml
+          # Just set the environment variable directly, similar to build_tauri.js
+          # This is picked up by Cargo's credential provider
+          echo "CARGO_REGISTRIES_KELLNR_TOKEN=$CARGO_REGISTRIES_KELLNR_TOKEN" >> $GITHUB_ENV
 
       - name: Set signing environment variables
         env:
@@ -130,13 +125,8 @@ jobs:
             src-tauri/target/*/release/bundle/**/*.{sig,hash}
           retention-days: 3
 
-      - name: Remove KELLNR registry configuration
-        if: always()
-        run: |
-          # Clean up the custom registry for security
-          if [ -f ~/.cargo/config.toml ]; then
-            rm ~/.cargo/config.toml
-          fi
+      # No cleanup needed as we're using environment variables
+      # which automatically expire at the end of the workflow run
 
   publish-to-custom-api:
     needs: [ publish-tauri ]
