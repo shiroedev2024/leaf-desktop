@@ -18,6 +18,7 @@ import { useLeafStore } from './leaf.ts';
 import { Utils } from '../utils/Utils.ts';
 import type { Update } from '@tauri-apps/plugin-updater';
 import { markRaw } from 'vue';
+import { error, info } from '../utils/logger';
 
 export const useUpdateStore = defineStore('update', {
   state: () => ({
@@ -84,7 +85,7 @@ export const useUpdateStore = defineStore('update', {
           'detect_linux_system_info'
         )) as LinuxSystemInfo;
       } catch (e) {
-        console.error('Failed to get system info:', e);
+        error('Failed to get system info:', e);
         this.systemInfo = null;
       }
     },
@@ -112,7 +113,7 @@ export const useUpdateStore = defineStore('update', {
       } catch (e) {
         this.updateState = UpdateState.Error;
         this.updateError = e instanceof Error ? e.message : String(e);
-        console.error('Error checking for updates:', e);
+        error('Error checking for updates:', e);
       }
     },
 
@@ -124,14 +125,14 @@ export const useUpdateStore = defineStore('update', {
       const currentVersion = await getVersion();
       let baseUrl: string;
       if (import.meta.env.DEV) {
-        baseUrl = 'https://obliging-lemming-stirred.loca.lt';
+        baseUrl = 'https://development.litevpn.top';
       } else {
         baseUrl = 'https://litevpn.top';
       }
 
       const url = `${baseUrl}/downloads/linux/${this.systemInfo.packageManagerType}/${this.systemInfo.arch}/${currentVersion}`;
 
-      console.log('Checking for Linux update at:', url);
+      info('Checking for Linux update at:', url);
 
       const response = await fetch(url, { method: 'GET' });
       if (!response.ok) {
@@ -139,7 +140,7 @@ export const useUpdateStore = defineStore('update', {
       }
 
       const data: LinuxUpdateResponse = await response.json();
-      console.log('Linux update data:', data);
+      info('Linux update data:', data);
 
       if (data.available) {
         this.updateState = UpdateState.Available;
@@ -159,7 +160,7 @@ export const useUpdateStore = defineStore('update', {
     async checkForTauriUpdate(): Promise<void> {
       const update = await check();
       if (update) {
-        console.log(`Found update ${update.version} from ${update.date}`);
+        info(`Found update ${update.version} from ${update.date}`);
 
         this.updateState = UpdateState.Available;
         this.updateInfo = {
@@ -215,7 +216,7 @@ export const useUpdateStore = defineStore('update', {
                 total: contentLength || 0,
                 percentage: 0,
               };
-              console.log(`Started downloading ${contentLength} bytes`);
+              info(`Started downloading ${contentLength} bytes`);
               break;
 
             case 'Progress': {
@@ -228,23 +229,23 @@ export const useUpdateStore = defineStore('update', {
                 total: contentLength || 0,
                 percentage: Math.round(percentage),
               };
-              console.log(
+              info(
                 `Downloaded ${downloaded} from ${contentLength} bytes (${percentage.toFixed(1)}%)`
               );
               break;
             }
 
             case 'Finished':
-              console.log('Download finished - Setting state to Downloaded');
+              info('Download finished - Setting state to Downloaded');
               this.updateState = UpdateState.Downloaded;
-              console.log('Current updateState:', this.updateState);
+              info('Current updateState:', this.updateState);
               break;
           }
         });
       } catch (e) {
         this.updateState = UpdateState.Error;
         this.updateError = e instanceof Error ? e.message : String(e);
-        console.error('Error downloading update:', e);
+        error('Error downloading update:', e);
       }
     },
 
@@ -271,7 +272,7 @@ export const useUpdateStore = defineStore('update', {
       } catch (e) {
         this.updateState = UpdateState.Error;
         this.updateError = e instanceof Error ? e.message : String(e);
-        console.error('Error opening download URL:', e);
+        error('Error opening download URL:', e);
       }
     },
 
@@ -282,7 +283,7 @@ export const useUpdateStore = defineStore('update', {
         const leafStore = useLeafStore();
 
         if (await leafStore.isCoreRunning()) {
-          console.log('Core is running; checking Leaf status');
+          info('Core is running; checking Leaf status');
 
           if (await leafStore.isLeafRunning()) {
             const userAgreed = await ask(
@@ -295,7 +296,7 @@ export const useUpdateStore = defineStore('update', {
             );
 
             if (userAgreed) {
-              console.log('User agreed to stop Leaf (VPN)');
+              info('User agreed to stop Leaf (VPN)');
               await leafStore.stopLeaf();
 
               const leafStopped = await Utils.waitFor(
@@ -307,7 +308,7 @@ export const useUpdateStore = defineStore('update', {
                 throw new Error('Timed out waiting for Leaf to stop');
               }
 
-              console.log('Stopping core before update');
+              info('Stopping core before update');
               await leafStore.shutdownCore();
 
               const coreStopped = await Utils.waitFor(
@@ -320,13 +321,11 @@ export const useUpdateStore = defineStore('update', {
               }
             } else {
               this.updateState = UpdateState.Downloaded;
-              console.log(
-                'User cancelled stopping VPN; aborting update install'
-              );
+              info('User cancelled stopping VPN; aborting update install');
               return;
             }
           } else {
-            console.log(
+            info(
               'Core is running but VPN is not active; stopping core automatically before update'
             );
             await leafStore.shutdownCore();
@@ -357,7 +356,7 @@ export const useUpdateStore = defineStore('update', {
       } catch (e) {
         this.updateState = UpdateState.Error;
         this.updateError = e instanceof Error ? e.message : String(e);
-        console.error('Error installing update:', e);
+        error('Error installing update:', e);
       }
     },
 

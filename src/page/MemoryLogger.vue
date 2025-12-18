@@ -99,6 +99,7 @@
 <script lang="ts">
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
 import { usePreferencesStore } from '../store/preferences';
+import { error } from '../utils/logger';
 
 export default {
   name: 'MemoryLogger',
@@ -171,8 +172,8 @@ export default {
       try {
         await preferencesStore.api.clearLogs();
         logs.value = [];
-      } catch (error) {
-        console.error('Error clearing logs:', error);
+      } catch (err) {
+        error('Error clearing logs:', err);
       }
     };
 
@@ -187,8 +188,8 @@ export default {
         if (autoScrollEnabled.value) {
           scrollToBottom();
         }
-      } catch (error) {
-        console.error('Error fetching logs:', error);
+      } catch (err) {
+        error('Error fetching logs:', err);
       }
     };
 

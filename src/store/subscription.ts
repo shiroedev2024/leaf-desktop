@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { SubscriptionEvent, SubscriptionState } from '../types/types.ts';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { info } from '../utils/logger';
 
 export const useSubscriptionStore = defineStore('subscription', {
   state: () => ({
@@ -32,7 +33,7 @@ export const useSubscriptionStore = defineStore('subscription', {
       this.unlistenFn = await listen<SubscriptionEvent>(
         'subscription-event',
         async (event) => {
-          console.log('subscription event', event);
+          info('subscription event', event);
 
           const subscriptionState = event.payload;
 
@@ -52,20 +53,13 @@ export const useSubscriptionStore = defineStore('subscription', {
     async updateSubscription(clientId: string) {
       this.subscriptionState = SubscriptionState.Fetching;
 
-      await invoke('update_subscription', {
-        tls: true,
-        fragment: true,
-        clientId: clientId,
-      });
+      await invoke('update_subscription', { clientId: clientId });
     },
 
     async autoUpdateSubscription() {
       this.subscriptionState = SubscriptionState.Fetching;
 
-      await invoke('auto_update_subscription', {
-        tls: true,
-        fragment: true,
-      });
+      await invoke('auto_update_subscription');
     },
 
     async dispose(): Promise<void> {

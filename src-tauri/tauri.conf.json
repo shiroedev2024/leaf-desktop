@@ -54,7 +54,7 @@
   "plugins": {
     "updater": {
       "endpoints": [
-        "https://obliging-lemming-stirred.loca.lt/downloads/tauri/{{target}}/{{arch}}/{{current_version}}",
+        "https://development.litevpn.top/downloads/tauri/{{target}}/{{arch}}/{{current_version}}",
         "https://litevpn.top/downloads/tauri/{{target}}/{{arch}}/{{current_version}}"
       ],
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM3NzM4MTRBNzI0MTU3MjYKUldRbVYwRnlTb0Z6TjdFdkE5TTdqM0YrczNUM2lBcCt5dEhva1VsUVMzTTlCK3NGRGJPeGJLS2EK",
@@ -72,5 +72,5 @@
     }
   },
   "productName": "Leaf VPN",
-  "version": "1.6.2"
+  "version": "1.6.4"
 }

@@ -18,7 +18,7 @@
       "identifier": "http:default",
       "allow": [
         {
-          "url": "https://obliging-lemming-stirred.loca.lt/**"
+          "url": "https://development.litevpn.top/**"
         },
         {
           "url": "https://litevpn.top/**"
@@ -40,6 +40,8 @@
     "updater:allow-install",
     "updater:allow-download-and-install",
     "notification:allow-is-permission-granted",
+    "notification:allow-request-permission",
+    "notification:allow-notify",
     "window-state:allow-save-window-state",
     "window-state:allow-restore-state",
     "opener:default",

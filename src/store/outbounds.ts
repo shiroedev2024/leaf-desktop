@@ -2,6 +2,7 @@ import { defineStore } from 'pinia';
 import { OutboundInfo } from '../api/OutboundInfo.ts';
 import { OutboundState } from '../types/types.ts';
 import { usePreferencesStore } from './preferences.ts';
+import { error } from '../utils/logger';
 
 export const useOutboundsStore = defineStore('outbounds', {
   state: () => ({
@@ -27,7 +28,7 @@ export const useOutboundsStore = defineStore('outbounds', {
         ).outbounds;
         this.outboundState = OutboundState.Success;
       } catch (e) {
-        console.error(e);
+        error(e);
         this.outboundState = OutboundState.Error;
       }
     },
@@ -41,7 +42,7 @@ export const useOutboundsStore = defineStore('outbounds', {
         this.outbounds.find((o) => o.is_selected)!.is_selected = false;
         this.outbounds.find((o) => o.name === outbound)!.is_selected = true;
       } catch (e) {
-        console.error(e);
+        error(e);
       }
     },
   },

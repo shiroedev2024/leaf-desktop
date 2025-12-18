@@ -17,7 +17,12 @@
 <script lang="ts">
 import { onMounted, watch, ref, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { DeepLinkState, LeafState, SubscriptionState } from './types/types.ts';
+import {
+  ConnectivityState,
+  DeepLinkState,
+  LeafState,
+  SubscriptionState,
+} from './types/types.ts';
 import { useLeafStore } from './store/leaf.ts';
 import { useSubscriptionStore } from './store/subscription.ts';
 import { useOutboundsStore } from './store/outbounds.ts';
@@ -28,6 +33,12 @@ import { Store } from '@tauri-apps/plugin-store';
 import delay from 'delay';
 import { getDefaultPreferences } from './utils/defaultPreferences';
 import { useUpdateStore } from './store/update.ts';
+import { info, error, debug } from './utils/logger';
+import {
+  isPermissionGranted,
+  requestPermission,
+  sendNotification,
+} from '@tauri-apps/plugin-notification';
 
 export default {
   components: {
@@ -47,7 +58,7 @@ export default {
     watch(
       () => leafStore.leafState,
       async (newValue, oldValue) => {
-        console.log('leaf state changed from', oldValue, 'to', newValue);
+        info('leaf state changed from', oldValue, 'to', newValue);
 
         if (newValue == LeafState.Started) {
           await outboundsStore.getOutbounds();
@@ -63,12 +74,7 @@ export default {
     watch(
       () => subscriptionStore.subscriptionState,
       async (newValue, oldValue) => {
-        console.log(
-          'subscription state changed from',
-          oldValue,
-          'to',
-          newValue
-        );
+        info('subscription state changed from', oldValue, 'to', newValue);
 
         if (newValue === SubscriptionState.Success) {
           await preferencesStore.fetchLeafPreferences();
@@ -90,16 +96,61 @@ export default {
     watch(
       () => deeplinkStore.deeplinkState,
       async (newValue, oldValue) => {
-        console.log('deeplink state changed from', oldValue, 'to', newValue);
+        info('deeplink state changed from', oldValue, 'to', newValue);
 
         if (newValue === DeepLinkState.Received) {
-          console.log('navigating to AutoProfile due to deeplink received');
+          info('navigating to AutoProfile due to deeplink received');
           await router.push('/auto-profile');
         }
       }
     );
 
+    // Notify user when network availability changes from available -> unavailable
+    watch(
+      () => leafStore.connectivityState,
+      async (newValue, oldValue) => {
+        debug('connectivity state changed from', oldValue, 'to', newValue);
+        try {
+          if (
+            oldValue === ConnectivityState.Recovered &&
+            newValue === ConnectivityState.Lost
+          ) {
+            if (
+              (await isPermissionGranted()) &&
+              leafStore.leafState === LeafState.Started
+            ) {
+              sendNotification({
+                title: 'Network disconnected',
+                body: 'No internet. VPN disconnected — Kill Switch active. Traffic blocked; your data is protected.',
+              });
+            } else {
+              debug('Notification permission not granted or Leaf not started');
+            }
+          }
+        } catch (e) {
+          error('Failed to send network notification:', e);
+        }
+      }
+    );
+
     onMounted(async () => {
+      // Ask for notification permission once on startup (don't prompt repeatedly)
+      try {
+        let granted = await isPermissionGranted();
+        if (!granted) {
+          const perm = await requestPermission();
+          granted = perm === 'granted';
+        }
+
+        if (granted) {
+          info('Notification permission granted');
+        } else {
+          debug('Notification permission denied');
+        }
+      } catch (e) {
+        error('Notification permission request failed:', e);
+      }
+
       await deeplinkStore.init();
       await leafStore.init();
       await subscriptionStore.init();
@@ -113,7 +164,7 @@ export default {
       try {
         await initializeApp();
       } catch (e) {
-        console.log('Error initializing app:', e);
+        error('Error initializing app:', e);
       }
     });
 
@@ -124,7 +175,7 @@ export default {
 
       updateStore.resetUpdateState();
 
-      console.log('App component unmounted and stores disposed');
+      info('App component unmounted and stores disposed');
     });
 
     const initializeApp = async () => {
@@ -136,7 +187,7 @@ export default {
       };
 
       if (firstRun.value) {
-        console.info('first run detected - setting default preferences');
+        info('first run detected - setting default preferences');
 
         const default_preferences = getDefaultPreferences(navigator.userAgent);
 
@@ -145,7 +196,7 @@ export default {
         await store.set(key, { value: false });
         await store.save();
       } else {
-        console.info('not first run detected');
+        info('not first run detected');
       }
     };
 

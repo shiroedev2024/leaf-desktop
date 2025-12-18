@@ -121,6 +121,7 @@ import { useRoute } from 'vue-router';
 import { useUpdateStore } from '../store/update.ts';
 import { Store } from '@tauri-apps/plugin-store';
 import { useLeafStore } from '../store/leaf.ts';
+import { error } from '../utils/logger';
 
 export default defineComponent({
   name: 'SidebarComponent',
@@ -149,8 +150,8 @@ export default defineComponent({
         if (saved !== null) {
           collapsed.value = saved as boolean;
         }
-      } catch (error) {
-        console.error('Failed to load sidebar state from store:', error);
+      } catch (err) {
+        error('Failed to load sidebar state from store:', err);
       }
 
       checkScreenSize();
@@ -160,8 +161,8 @@ export default defineComponent({
       // Fetch versions
       try {
         versions.value = await leafStore.getVersions();
-      } catch (error) {
-        console.error('Failed to fetch versions:', error);
+      } catch (err) {
+        error('Failed to fetch versions:', err);
       }
     });
 
@@ -196,8 +197,8 @@ export default defineComponent({
         const store = await Store.load('app_data.bin');
         await store.set('sidebar-collapsed', collapsed.value);
         await store.save();
-      } catch (error) {
-        console.error('Failed to save sidebar state to store:', error);
+      } catch (err) {
+        error('Failed to save sidebar state to store:', err);
       }
     };
 

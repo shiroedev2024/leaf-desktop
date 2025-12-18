@@ -42,7 +42,13 @@ export interface UpdateLeafPreferences {
 export enum CoreState {
   Stopped = 'Stopped',
   Started = 'Started',
+  Loading = 'Loading',
   Error = 'Error',
+}
+
+export enum ConnectivityState {
+  Recovered = 'Recovered',
+  Lost = 'Lost',
 }
 
 export enum LeafState {
@@ -106,18 +112,23 @@ export interface UpdateProgress {
   percentage: number;
 }
 
+export type ConnectivityEvent = { type: 'recovered' } | { type: 'lost' };
+
 export type CoreEvent =
+  | { type: 'starting' }
   | { type: 'started' }
   | { type: 'stopped' }
   | { type: 'error'; data: { error: string } };
 
 export type LeafEvent =
+  | { type: 'starting' }
   | { type: 'started' }
   | { type: 'stopped' }
   | { type: 'reloaded' }
   | { type: 'error'; data: { error: string } };
 
 export type SubscriptionEvent =
+  | { type: 'updating' }
   | { type: 'success' }
   | { type: 'error'; data: { error: string } };
 

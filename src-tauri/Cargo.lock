@@ -2514,9 +2514,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "leaf-build-deps"
-version = "0.11.9"
+version = "0.12.9"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "dc8135885378356cbc7949cc6235739303727873ae45cc6cf4e10ada08d596e0"
+checksum = "cb69a2304171cc91856d5ea7665784db8cba8d2bc3d4a685b36680cad2ef6048"
 dependencies = [
  "hex",
  "log",
@@ -2529,7 +2529,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-desktop"
-version = "1.1.0"
+version = "1.1.2"
 dependencies = [
  "anyhow",
  "leaf-build-deps",
@@ -2560,9 +2560,9 @@ dependencies = [
 
 [[package]]
 name = "leaf-util"
-version = "0.2.3"
+version = "0.2.6"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "0a01564af84ce304db93a2939fa30589dd23b9e98c61f9e296a3c7ec1f3ee344"
+checksum = "bdd84234b45077c5c0eb67b3f1c30846ba6cd016fb8467295b7efdc97d8f04d2"
 dependencies = [
  "anyhow",
  "build-target",
@@ -2586,11 +2586,16 @@ dependencies = [
 
 [[package]]
 name = "leaf_sdk_desktop"
-version = "0.4.8"
+version = "0.5.7"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "d15f762363cf890cfbaa174f4c9d9611c99e7fd0309a333fc9433a1adb0a0dde"
+checksum = "b4066af1cfda093401c2f59cfd475c30529a5ceff38f0c42d242837de619d761"
 dependencies = [
  "anyhow",
+ "bytes",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
  "ipc",
  "lazy_static",
  "leaf-util",

@@ -54,6 +54,15 @@
     />
 
     <Message
+      v-if="
+        leafStore.leafState === 'Started' &&
+        leafStore.connectivityState === 'Lost'
+      "
+      type="warning"
+      message="No internet — your network connection dropped. VPN can't connect (not a VPN issue). Kill Switch is active: traffic is blocked and your data is protected."
+    />
+
+    <Message
       v-if="preferencesStore.isExpired"
       type="warning"
       message="Your subscription has expired!"
@@ -80,7 +89,20 @@
     </Message>
 
     <Message v-if="showConnectingDelayMessage" type="info">
-      Connecting is taking longer than expected. This may take up to 1 minute.
+      <div class="w-full flex items-center justify-between text-sm">
+        <p class="m-0">
+          Connecting is taking longer than expected. This may take up to 1
+          minute.
+        </p>
+        <div class="flex-shrink-0">
+          <button
+            @click.stop="handleForceShutdown"
+            class="ml-4 px-3 py-1 text-sm font-medium text-white bg-red-600 rounded hover:bg-red-700 transition-colors"
+          >
+            Force stop core
+          </button>
+        </div>
+      </div>
     </Message>
 
     <!-- Middle Section (Scrollable) -->
@@ -122,6 +144,7 @@ import Message from '../components/Message.vue';
 import UpdateDialog from '../components/UpdateDialog.vue';
 import { useUpdateStore } from '../store/update.ts';
 import { onMounted, ref, watch, onUnmounted, computed } from 'vue';
+import { error } from '../utils/logger';
 
 export default {
   name: 'DashboardComponent',
@@ -176,7 +199,7 @@ export default {
         await updateStore.init();
         await updateStore.checkForUpdates();
       } catch (e) {
-        console.error('Error initializing update store:', e);
+        error('Error initializing update store:', e);
       }
     });
 
@@ -215,6 +238,14 @@ export default {
       }
     };
 
+    const handleForceShutdown = async () => {
+      try {
+        await leafStore.forceShutdownCore();
+      } catch (e) {
+        error('forceShutdownCore failed', e);
+      }
+    };
+
     return {
       preferencesStore,
       leafStore,
@@ -228,6 +259,7 @@ export default {
       closeUpdateDialog,
       handleUpdateAction,
       dismissNotification,
+      handleForceShutdown,
     };
   },
 };

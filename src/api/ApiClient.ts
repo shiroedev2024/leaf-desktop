@@ -4,6 +4,12 @@ import { SelectReply } from './SelectReply';
 import { Stat } from './Stat';
 import { UsageReply } from './UsageReply';
 import { SelectListReply } from './SelectListReply.ts';
+import { OutboundListReply } from './OutboundListReply';
+import { OutboundLastPeerActiveReply } from './OutboundLastPeerActiveReply';
+import { OutboundSinceLastPeerActiveReply } from './OutboundSinceLastPeerActiveReply';
+import { OutboundHealthReply } from './OutboundHealthReply';
+import { FailoverStatusReply } from './FailoverStatusReply';
+import { PingReply } from './PingReply';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -65,6 +71,78 @@ class ApiClient {
   public async shutdown(): Promise<boolean> {
     const response = await this.client.post(`/api/v1/runtime/shutdown`);
     return response.status === 200;
+  }
+
+  public async getOutboundList(): Promise<OutboundListReply> {
+    const response = await this.client.get<OutboundListReply>(
+      `/api/v1/app/outbound/list`
+    );
+    return response.data;
+  }
+
+  public async getOutboundLastPeerActive(
+    tag: string
+  ): Promise<OutboundLastPeerActiveReply> {
+    const response = await this.client.get<OutboundLastPeerActiveReply>(
+      `/api/v1/runtime/outbound/${tag}/last_peer_active`
+    );
+    return response.data;
+  }
+
+  public async getOutboundSinceLastPeerActive(
+    tag: string
+  ): Promise<OutboundSinceLastPeerActiveReply> {
+    const response = await this.client.get<OutboundSinceLastPeerActiveReply>(
+      `/api/v1/runtime/outbound/${tag}/since_last_peer_active`
+    );
+    return response.data;
+  }
+
+  public async getOutboundHealth(tag: string): Promise<OutboundHealthReply> {
+    const response = await this.client.get<OutboundHealthReply>(
+      `/api/v1/runtime/outbound/${tag}/health`
+    );
+    return response.data;
+  }
+
+  public async getFailoverStatus(
+    outbound: string
+  ): Promise<FailoverStatusReply> {
+    const response = await this.client.get<FailoverStatusReply>(
+      `/api/v1/app/outbound/failover/status?outbound=${outbound}`
+    );
+    return response.data;
+  }
+
+  public async forceFailoverHealthCheck(outbound: string): Promise<boolean> {
+    const response = await this.client.post(
+      `/api/v1/app/outbound/failover/healthcheck?outbound=${outbound}`
+    );
+    return response.status === 200;
+  }
+
+  public async forceFailoverHealthCheckAll(): Promise<boolean> {
+    const response = await this.client.post(
+      `/api/v1/app/outbound/failover/healthcheck/all`
+    );
+    return response.status === 200 || response.status === 202;
+  }
+
+  public async getPing(
+    tcpTarget?: string,
+    udpTarget?: string,
+    timeout?: number
+  ): Promise<PingReply> {
+    const params = new URLSearchParams();
+    if (tcpTarget) params.append('tcp_target', tcpTarget);
+    if (udpTarget) params.append('udp_target', udpTarget);
+    if (timeout !== undefined) params.append('timeout', timeout.toString());
+
+    const queryString = params.toString();
+    const url = `/api/v1/runtime/ping${queryString ? `?${queryString}` : ''}`;
+
+    const response = await this.client.get<PingReply>(url);
+    return response.data;
   }
 }
 

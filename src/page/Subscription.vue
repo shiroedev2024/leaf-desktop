@@ -96,6 +96,7 @@ import InfoCard from '../components/InfoCard.vue';
 import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask, message } from '@tauri-apps/plugin-dialog';
 import { Utils } from '../utils/Utils.ts';
+import { error } from '../utils/logger';
 
 export default {
   name: 'SubscriptionComponent',
@@ -150,7 +151,7 @@ export default {
           );
         }
       } catch (e) {
-        console.log('Error reading clipboard:', e);
+        error('Error reading clipboard:', e);
         await message('Error reading clipboard.', {
           title: 'Clipboard Error',
           kind: 'error',

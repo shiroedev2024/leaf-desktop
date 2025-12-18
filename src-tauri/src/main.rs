@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use leaf_sdk_desktop::{CoreState, LeafState, SubscriptionState};
-use log::{debug, error, info, warn};
+use leaf_sdk_desktop::{ConnectivityState, CoreState, LeafState, SubscriptionState};
+use log::info;
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use std::env;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Window};
@@ -16,19 +18,33 @@ pub const DAEMONIZE: bool = true;
 #[cfg(windows)]
 pub const DAEMONIZE: bool = true;
 
+pub static LATEST_CORE_STATE: Lazy<Mutex<Option<CoreState>>> = Lazy::new(|| Mutex::new(None));
+pub static LATEST_LEAF_STATE: Lazy<Mutex<Option<LeafState>>> = Lazy::new(|| Mutex::new(None));
+pub static LATEST_SUBSCRIPTION_STATE: Lazy<Mutex<Option<SubscriptionState>>> = Lazy::new(|| Mutex::new(None));
+pub static LATEST_CONNECTIVITY_STATE: Lazy<Mutex<Option<ConnectivityState>>> = Lazy::new(|| Mutex::new(None));
+
 fn core_callback<R: Runtime>(window: Window<R>, state: CoreState) {
     info!("Core state: {:?}", state);
+    *LATEST_CORE_STATE.lock() = Some(state.clone());
     window.emit("core-event", state).unwrap();
 }
 
 fn leaf_callback<R: Runtime>(window: Window<R>, state: LeafState) {
     info!("Leaf state: {:?}", state);
+    *LATEST_LEAF_STATE.lock() = Some(state.clone());
     window.emit("leaf-event", state).unwrap();
 }
 
 fn subscription_state<R: Runtime>(window: Window<R>, state: SubscriptionState) {
     info!("Subscription state: {:?}", state);
+    *LATEST_SUBSCRIPTION_STATE.lock() = Some(state.clone());
     window.emit("subscription-event", state).unwrap();
+}
+
+fn connectivity_state<R: Runtime>(window: Window<R>, state: ConnectivityState) {
+    info!("Connectivity state: {:?}", state);
+    *LATEST_CONNECTIVITY_STATE.lock() = Some(state.clone());
+    window.emit("connectivity-event", state).unwrap();
 }
 
 #[tauri::command]
@@ -51,6 +67,13 @@ fn is_core_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
 #[tauri::command]
 fn shutdown_core<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
     leaf_sdk_desktop::shutdown_core(DAEMONIZE, move |state| {
+        core_callback(window.clone(), state.clone());
+    });
+}
+
+#[tauri::command]
+fn force_shutdown_core<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
+    leaf_sdk_desktop::force_shutdown_core(DAEMONIZE, move |state| {
         core_callback(window.clone(), state.clone());
     });
 }
@@ -89,26 +112,16 @@ fn stop_leaf<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
 }
 
 #[tauri::command]
-fn auto_update_subscription<R: Runtime>(
-    _app: AppHandle<R>,
-    window: Window<R>,
-    tls: bool,
-    fragment: bool,
-) {
-    leaf_sdk_desktop::auto_update_subscription(tls, fragment, move |state| {
+fn auto_update_subscription<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
+    leaf_sdk_desktop::auto_update_subscription(move |state| {
         subscription_state(window.clone(), state.clone());
     });
 }
 
 #[tauri::command]
-fn update_subscription<R: Runtime>(
-    _app: AppHandle<R>,
-    window: Window<R>,
-    tls: bool,
-    fragment: bool,
-    client_id: String,
-) {
-    leaf_sdk_desktop::update_subscription(tls, fragment, client_id, move |state| {
+fn update_subscription<R: Runtime>(_app: AppHandle<R>, window: Window<R>, client_id: String) {
+    // Pass `None` for tls and fragment to let the library auto-select the best options.
+    leaf_sdk_desktop::update_subscription(None, None, client_id, move |state| {
         subscription_state(window.clone(), state.clone());
     });
 }
@@ -151,6 +164,23 @@ fn detect_linux_system_info<R: Runtime>(
 }
 
 #[tauri::command]
+fn start_connectivity_monitor<R: Runtime>(_app: AppHandle<R>, window: Window<R>, api_port: u16) {
+    leaf_sdk_desktop::start_connectivity_monitor(api_port, None, move |state| {
+        connectivity_state(window.clone(), state.clone());
+    });
+}
+
+#[tauri::command]
+fn is_connectivity_monitor_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
+    leaf_sdk_desktop::is_connectivity_monitor_running()
+}
+
+#[tauri::command]
+fn stop_connectivity_monitor<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) {
+    leaf_sdk_desktop::stop_connectivity_monitor();
+}
+
+#[tauri::command]
 async fn show_main_window<R: Runtime>(app: AppHandle<R>) -> Result<String, String> {
     let result = window_manager::WindowManager::show_main_window(&app).await;
     Ok(format!("{:?}", result))
@@ -180,7 +210,6 @@ fn get_versions<R: Runtime>(app: AppHandle<R>, _window: Window<R>) -> Result<Str
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             info!("Single instance triggered with args: {:?}", argv);
 
@@ -189,6 +218,7 @@ fn main() {
                 let _ = window_manager::WindowManager::show_main_window(&app_clone).await;
             });
         }))
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_dialog::init())
@@ -253,6 +283,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_core,
             shutdown_core,
+            force_shutdown_core,
             is_core_running,
             test_config,
             is_leaf_running,
@@ -266,6 +297,9 @@ fn main() {
             verify_file_integrity,
             ping,
             detect_linux_system_info,
+            start_connectivity_monitor,
+            is_connectivity_monitor_running,
+            stop_connectivity_monitor,
             show_main_window,
             toggle_main_window,
             get_main_window_state,

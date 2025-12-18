@@ -1,7 +1,16 @@
 import { defineStore } from 'pinia';
-import { CoreEvent, CoreState, LeafEvent, LeafState } from '../types/types.ts';
+import {
+  ConnectivityEvent,
+  ConnectivityState,
+  CoreEvent,
+  CoreState,
+  LeafEvent,
+  LeafState,
+} from '../types/types.ts';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
+import { info, error, warn } from '../utils/logger';
+import { usePreferencesStore } from './preferences.ts';
 
 export const useLeafStore = defineStore('leaf', {
   state: () => ({
@@ -12,6 +21,9 @@ export const useLeafStore = defineStore('leaf', {
     coreState: CoreState.Stopped as CoreState,
     coreError: '',
     coreUnlistenFn: null as UnlistenFn | null,
+
+    connectivityState: ConnectivityState.Recovered as ConnectivityState,
+    connectivityUnlistenFn: null as UnlistenFn | null,
 
     // Ping monitoring state
     pingTimer: null as number | null,
@@ -53,11 +65,14 @@ export const useLeafStore = defineStore('leaf', {
       this.coreUnlistenFn = await listen<CoreEvent>(
         'core-event',
         async (event) => {
-          console.log('core event', event);
+          info('core event', event);
 
           const coreState = event.payload;
 
           switch (coreState.type) {
+            case 'starting':
+              this.coreState = CoreState.Loading;
+              break;
             case 'started':
               this.coreState = CoreState.Started;
               this.startPingTimer();
@@ -65,6 +80,7 @@ export const useLeafStore = defineStore('leaf', {
               break;
             case 'stopped':
               this.coreState = CoreState.Stopped;
+              this.leafState = LeafState.Stopped;
               this.stopPingTimer();
               break;
             case 'error':
@@ -79,16 +95,33 @@ export const useLeafStore = defineStore('leaf', {
       this.leafUnlistenFn = await listen<LeafEvent>(
         'leaf-event',
         async (event) => {
-          console.log('leaf event', event);
+          info('leaf event', event);
 
           const leafState = event.payload;
 
           switch (leafState.type) {
+            case 'starting':
+              this.leafState = LeafState.Loading;
+              break;
             case 'started':
               this.leafState = LeafState.Started;
+              try {
+                const preferencesStore = usePreferencesStore();
+                const apiPort = preferencesStore.leafPreferences.api_port;
+                await invoke('start_connectivity_monitor', {
+                  apiPort: apiPort,
+                });
+              } catch (e) {
+                error('start_connectivity_monitor failed', e);
+              }
               break;
             case 'stopped':
               this.leafState = LeafState.Stopped;
+              try {
+                await invoke('stop_connectivity_monitor');
+              } catch (e) {
+                error('stop_connectivity_monitor failed', e);
+              }
               break;
             case 'reloaded':
               this.leafState = LeafState.Reloaded;
@@ -105,12 +138,30 @@ export const useLeafStore = defineStore('leaf', {
           }
         }
       );
+
+      this.connectivityUnlistenFn = await listen<ConnectivityEvent>(
+        'connectivity-event',
+        async (event) => {
+          info('connectivity event', event);
+
+          const connectivityState = event.payload;
+
+          switch (connectivityState.type) {
+            case 'recovered':
+              this.connectivityState = ConnectivityState.Recovered;
+              break;
+            case 'lost':
+              this.connectivityState = ConnectivityState.Lost;
+              break;
+          }
+        }
+      );
     },
 
     async toggleLeaf(): Promise<void> {
       try {
         await this.verifyFileIntegrity();
-        console.log('asset files verified');
+        info('asset files verified');
       } catch (e) {
         this.coreState = CoreState.Error;
         this.coreError = e as string;
@@ -144,6 +195,10 @@ export const useLeafStore = defineStore('leaf', {
 
     async shutdownCore(): Promise<void> {
       await invoke('shutdown_core');
+    },
+
+    async forceShutdownCore(): Promise<void> {
+      await invoke('force_shutdown_core');
     },
 
     async isCoreRunning(): Promise<boolean> {
@@ -199,7 +254,7 @@ export const useLeafStore = defineStore('leaf', {
       try {
         return await invoke('is_leaf_running');
       } catch (e) {
-        console.error('is_leaf_running failed', e);
+        error('is_leaf_running failed', e);
         return false;
       }
     },
@@ -208,7 +263,7 @@ export const useLeafStore = defineStore('leaf', {
       try {
         return await invoke('ping');
       } catch (e) {
-        console.error('ping failed', e);
+        error('ping failed', e);
         throw e;
       }
     },
@@ -218,7 +273,7 @@ export const useLeafStore = defineStore('leaf', {
         this.stopPingTimer();
       }
 
-      console.log('Starting ping timer');
+      info('Starting ping timer');
       this.pingTimer = setInterval(async () => {
         await this.performPing();
       }, this.pingIntervalMs);
@@ -226,7 +281,7 @@ export const useLeafStore = defineStore('leaf', {
 
     stopPingTimer(): void {
       if (this.pingTimer) {
-        console.log('Stopping ping timer');
+        info('Stopping ping timer');
         clearInterval(this.pingTimer);
         this.pingTimer = null;
         this.pingFailureCount = 0;
@@ -236,33 +291,32 @@ export const useLeafStore = defineStore('leaf', {
     async performPing(): Promise<void> {
       try {
         const response = await this.ping();
-        console.log('Ping response:', response);
+        info('Ping response:', response);
 
         // Reset failure count on successful ping
         if (this.pingFailureCount > 0) {
-          console.log('Ping recovered, resetting failure count');
+          info('Ping recovered, resetting failure count');
           this.pingFailureCount = 0;
         }
-      } catch (error) {
+      } catch (err) {
         this.pingFailureCount++;
-        console.warn(
+        warn(
           `Ping failed (${this.pingFailureCount}/${this.maxPingFailures}):`,
-          error
+          err
         );
 
         // If we've failed too many times, assume core was stopped externally
         if (this.pingFailureCount >= this.maxPingFailures) {
-          console.error(
-            'Core appears to be stopped externally, resetting state'
-          );
+          error('Core appears to be stopped externally, resetting state');
           this.resetLeafState();
         }
       }
     },
 
     resetLeafState(): void {
-      console.log('Resetting leaf store state due to external core stop');
+      info('Resetting leaf store state due to external core stop');
       this.stopPingTimer();
+
       this.coreState = CoreState.Stopped;
       this.coreError = '';
       this.leafState = LeafState.Stopped;
@@ -276,6 +330,14 @@ export const useLeafStore = defineStore('leaf', {
 
         if (await this.isLeafRunning()) {
           this.leafState = LeafState.Started;
+
+          try {
+            const preferencesStore = usePreferencesStore();
+            const apiPort = preferencesStore.leafPreferences.api_port;
+            await invoke('start_connectivity_monitor', { apiPort: apiPort });
+          } catch (e) {
+            error('start_connectivity_monitor failed', e);
+          }
         } else {
           this.leafState = LeafState.Stopped;
         }
@@ -294,6 +356,11 @@ export const useLeafStore = defineStore('leaf', {
       if (this.coreUnlistenFn) {
         this.coreUnlistenFn();
         this.coreUnlistenFn = null;
+      }
+
+      if (this.connectivityUnlistenFn) {
+        this.connectivityUnlistenFn();
+        this.connectivityUnlistenFn = null;
       }
 
       // Clean up ping timer

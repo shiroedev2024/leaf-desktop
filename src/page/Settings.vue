@@ -174,6 +174,7 @@ import SettingsInput from '../components/SettingsInput.vue';
 import SettingsListEditor from '../components/SettingsListEditor.vue';
 import Message from '../components/Message.vue';
 import { getDefaultPreferences } from '../utils/defaultPreferences';
+import { info } from '../utils/logger';
 
 export default {
   name: 'SettingsComponent',
@@ -197,7 +198,7 @@ export default {
     const error = ref('');
 
     const saveSettings = async () => {
-      console.log('Saving settings:', preferences.value);
+      info('Saving settings:', preferences.value);
 
       try {
         await preferencesStore.updateLeafPreferences(preferences.value);

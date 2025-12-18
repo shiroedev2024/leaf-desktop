@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia';
 import { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrent, onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { invoke } from '@tauri-apps/api/core';
 import { DeepLinkState } from '../types/types.ts';
 import { useSubscriptionStore } from './subscription';
 import delay from 'delay';
+import { warn, info } from '../utils/logger';
 
 export const useDeeplinkStore = defineStore('deeplink', {
   state: () => ({
@@ -19,8 +21,10 @@ export const useDeeplinkStore = defineStore('deeplink', {
       this.unlistenFn = await onOpenUrl(async (urls: string[]) => {
         if (urls && urls.length > 0) {
           try {
+            await invoke('show_main_window');
             await this.processUrl(urls[0]);
           } catch (err) {
+            await invoke('show_main_window');
             this.deeplinkState = DeepLinkState.UnknownError;
             this.errorMessage =
               err instanceof Error ? err.message : String(err);
@@ -33,15 +37,17 @@ export const useDeeplinkStore = defineStore('deeplink', {
         if (startUrls && startUrls.length > 0) {
           const url = startUrls[0];
           try {
+            await invoke('show_main_window');
             await this.processUrl(url);
           } catch (err) {
+            await invoke('show_main_window');
             this.deeplinkState = DeepLinkState.UnknownError;
             this.errorMessage =
               err instanceof Error ? err.message : String(err);
           }
         }
       } catch {
-        console.warn('Failed to get startup deep link via getCurrent()');
+        warn('Failed to get startup deep link via getCurrent()');
       }
     },
 
@@ -63,7 +69,7 @@ export const useDeeplinkStore = defineStore('deeplink', {
     },
 
     async processUrl(url: string): Promise<void> {
-      console.log('Processing url:', url);
+      info('Processing url:', url);
 
       const subscriptionStore = useSubscriptionStore();
 

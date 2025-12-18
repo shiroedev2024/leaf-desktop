@@ -1,6 +1,6 @@
 use crate::window_manager::WindowManager;
-use crate::DAEMONIZE;
-use leaf_sdk_desktop::CoreState;
+use crate::{DAEMONIZE, LATEST_LEAF_STATE};
+use leaf_sdk_desktop::{CoreState, LeafState};
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Runtime};
@@ -39,29 +39,49 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 }
 
 fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
+    let leaf_state = LATEST_LEAF_STATE.lock().clone();
+    
+    if let Some(LeafState::STARTING) = leaf_state {
+        let app_clone = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = app_clone
+                .notification()
+                .builder()
+                .title("Leaf VPN")
+                .body("Please wait until VPN finishes starting before quitting.")
+                .show();
+        });
+        return;
+    }
+
     let is_core_running = leaf_sdk_desktop::is_core_running();
     let is_leaf_running = leaf_sdk_desktop::is_leaf_running().unwrap_or(false);
 
     match (is_core_running, is_leaf_running) {
         (true, true) => {
-            app.notification()
-                .builder()
-                .title("Leaf VPN")
-                .body("Please first stop Leaf VPN before quitting.")
-                .show()
-                .unwrap();
+            let app_clone = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = app_clone
+                    .notification()
+                    .builder()
+                    .title("Leaf VPN")
+                    .body("Please first stop Leaf VPN before quitting.")
+                    .show();
+            });
         }
         (true, false) => {
             let app_clone = app.clone();
             leaf_sdk_desktop::shutdown_core(DAEMONIZE, move |state| {
                 if let CoreState::ERROR { error } = state {
-                    app_clone
-                        .notification()
-                        .builder()
-                        .title("Leaf VPN")
-                        .body(format!("Failed to shutdown core: {}", error))
-                        .show()
-                        .unwrap();
+                    let app_clone2 = app_clone.clone();
+                    tauri::async_runtime::spawn(async move {
+                        let _ = app_clone2
+                            .notification()
+                            .builder()
+                            .title("Leaf VPN")
+                            .body(format!("Failed to shutdown core: {}", error))
+                            .show();
+                    });
                 }
             });
 
