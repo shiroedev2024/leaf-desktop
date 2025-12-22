@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.4.1", features = [] }
-leaf-build-deps = { version = "0.12.9", registry = "kellnr"}
+leaf-build-deps = { version = "0.13.1", registry = "kellnr"}
 
 [dependencies]
 tauri = { version = "2.8.5", features = ["tray-icon"] }
@@ -40,8 +40,10 @@ sysinfo = "0.37.2"
 once_cell = "1.19"
 scopeguard = "1.2"
 parking_lot = "0.12"
+notify = "7.0"
+image = "0.25"
 
-leaf_sdk_desktop = { version = "0.5.7", registry = "kellnr" }
+leaf_sdk_desktop = { version = "0.6.1", registry = "kellnr" }
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

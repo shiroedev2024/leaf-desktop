@@ -8,37 +8,24 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Window operation result
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowOperationResult {
-    /// Window is shown and focused
     Shown,
-    /// Window is hidden
     Hidden,
-    /// Window destroyed
     Destroyed,
-    /// Operation failed
     Failed,
-    /// No action needed
     NoAction,
 }
 
-/// Window state
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WindowState {
-    /// Window is visible and focused
     VisibleFocused,
-    /// Window is visible but unfocused
     VisibleUnfocused,
-    /// Window is minimized
     Minimized,
-    /// Window is hidden
     Hidden,
-    /// Window does not exist
     NotExist,
 }
 
-// Window operation debounce mechanism
 static WINDOW_OPERATION_DEBOUNCE: OnceCell<Mutex<Instant>> = OnceCell::new();
 static WINDOW_OPERATION_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 const WINDOW_OPERATION_DEBOUNCE_MS: u64 = 500;
@@ -80,10 +67,8 @@ fn finish_window_operation() {
     WINDOW_OPERATION_IN_PROGRESS.store(false, Ordering::Release);
 }
 
-// Global AppHandle storage
 static APP_HANDLE: OnceCell<AppHandle> = OnceCell::new();
 
-/// Unified window manager
 pub struct WindowManager;
 
 impl WindowManager {
@@ -112,14 +97,11 @@ impl WindowManager {
         }
     }
 
-    /// Get main window instance
     pub fn get_main_window<R: Runtime>(app: &AppHandle<R>) -> Option<WebviewWindow<R>> {
         app.get_webview_window("main")
     }
 
-    /// Smartly show the main window
     pub async fn show_main_window<R: Runtime>(app: &AppHandle<R>) -> WindowOperationResult {
-        // Debounce check
         if !should_handle_window_operation() {
             return WindowOperationResult::NoAction;
         }
@@ -157,9 +139,7 @@ impl WindowManager {
         }
     }
 
-    /// Toggle main window visibility (show/hide)
     pub async fn toggle_main_window<R: Runtime>(app: &AppHandle<R>) -> WindowOperationResult {
-        // Debounce check
         if !should_handle_window_operation() {
             return WindowOperationResult::NoAction;
         }
@@ -190,7 +170,6 @@ impl WindowManager {
         }
     }
 
-    // Hide the main window
     pub(crate) fn hide_main_window<R: Runtime>(app: &AppHandle<R>) -> WindowOperationResult {
         info!("Window is visible, will hide window");
         if let Some(window) = Self::get_main_window(app) {
@@ -210,7 +189,6 @@ impl WindowManager {
         }
     }
 
-    // Activate existing main window
     fn activate_existing_main_window<R: Runtime>(app: &AppHandle<R>) -> WindowOperationResult {
         info!("Window exists but is hidden or minimized, activating window");
         if let Some(window) = Self::get_main_window(app) {
@@ -221,13 +199,11 @@ impl WindowManager {
         }
     }
 
-    /// Activate window (restore, show, and focus)
     fn activate_window<R: Runtime>(window: &WebviewWindow<R>) -> WindowOperationResult {
         info!("Starting to activate window");
 
         let mut operations_successful = true;
 
-        // 1. If window is minimized, restore it first
         if window.is_minimized().unwrap_or(false) {
             info!("Window is minimized, restoring");
             if let Err(e) = window.unminimize() {
@@ -236,33 +212,26 @@ impl WindowManager {
             }
         }
 
-        // 2. Show window
         if let Err(e) = window.show() {
             error!("Failed to show window: {}", e);
             operations_successful = false;
         }
 
-        // 3. Set focus
         if let Err(e) = window.set_focus() {
             error!("Failed to focus window: {}", e);
             operations_successful = false;
         }
 
-        // 4. Platform-specific activation strategy
         #[cfg(target_os = "macos")]
         {
             debug!("Applying macOS specific activation strategy");
-            // Note: In real Clash Verge Rev, this would call handle::Handle::global().set_activation_policy_regular()
-            // But we don't have their handle system, so we'll skip this for now
         }
 
         #[cfg(target_os = "windows")]
         {
-            // Windows: try additional activation methods
             if let Err(e) = window.set_always_on_top(true) {
                 warn!("Failed to set always on top (non-critical): {}", e);
             }
-            // Immediately unset always on top
             if let Err(e) = window.set_always_on_top(false) {
                 warn!("Failed to unset always on top (non-critical): {}", e);
             }
@@ -277,28 +246,24 @@ impl WindowManager {
         }
     }
 
-    /// Check if main window is visible
     pub fn is_main_window_visible<R: Runtime>(app: &AppHandle<R>) -> bool {
         Self::get_main_window(app)
             .map(|window| window.is_visible().unwrap_or(false))
             .unwrap_or(false)
     }
 
-    /// Check if main window is focused
     pub fn is_main_window_focused<R: Runtime>(app: &AppHandle<R>) -> bool {
         Self::get_main_window(app)
             .map(|window| window.is_focused().unwrap_or(false))
             .unwrap_or(false)
     }
 
-    /// Check if main window is minimized
     pub fn is_main_window_minimized<R: Runtime>(app: &AppHandle<R>) -> bool {
         Self::get_main_window(app)
             .map(|window| window.is_minimized().unwrap_or(false))
             .unwrap_or(false)
     }
 
-    /// Destroy the window
     pub fn destroy_main_window<R: Runtime>(app: &AppHandle<R>) -> WindowOperationResult {
         if let Some(window) = Self::get_main_window(app) {
             let _ = window.destroy();
@@ -306,15 +271,12 @@ impl WindowManager {
             #[cfg(target_os = "macos")]
             {
                 debug!("Applying macOS specific activation strategy");
-                // Note: In real Clash Verge Rev, this would call handle::Handle::global().set_activation_policy_accessory()
-                // But we don't have their handle system, so we'll skip this for now
             }
             return WindowOperationResult::Destroyed;
         }
         WindowOperationResult::Failed
     }
 
-    /// Get detailed window status information
     pub fn get_window_status_info<R: Runtime>(app: &AppHandle<R>) -> String {
         let state = Self::get_main_window_state(app);
         let is_visible = Self::is_main_window_visible(app);

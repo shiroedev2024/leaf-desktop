@@ -2,14 +2,17 @@
 
 use leaf_sdk_desktop::{ConnectivityState, CoreState, LeafState, SubscriptionState};
 use log::info;
+use notify::{Event as NotifyEvent, RecursiveMode, Result as NotifyResult, Watcher};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
 use std::env;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Window};
 use tauri_plugin_shell::ShellExt;
 mod helper;
 mod tray;
+mod tray_icon_manager;
 mod window_manager;
 
 #[cfg(unix)]
@@ -20,19 +23,36 @@ pub const DAEMONIZE: bool = true;
 
 pub static LATEST_CORE_STATE: Lazy<Mutex<Option<CoreState>>> = Lazy::new(|| Mutex::new(None));
 pub static LATEST_LEAF_STATE: Lazy<Mutex<Option<LeafState>>> = Lazy::new(|| Mutex::new(None));
-pub static LATEST_SUBSCRIPTION_STATE: Lazy<Mutex<Option<SubscriptionState>>> = Lazy::new(|| Mutex::new(None));
-pub static LATEST_CONNECTIVITY_STATE: Lazy<Mutex<Option<ConnectivityState>>> = Lazy::new(|| Mutex::new(None));
+pub static LATEST_SUBSCRIPTION_STATE: Lazy<Mutex<Option<SubscriptionState>>> =
+    Lazy::new(|| Mutex::new(None));
+pub static LATEST_CONNECTIVITY_STATE: Lazy<Mutex<Option<ConnectivityState>>> =
+    Lazy::new(|| Mutex::new(None));
+pub static FILE_WATCHER: Lazy<Mutex<Option<notify::RecommendedWatcher>>> =
+    Lazy::new(|| Mutex::new(None));
+
+#[derive(Clone, Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct FileWatchEvent {
+    pub path: String,
+    pub event_type: String,
+}
 
 fn core_callback<R: Runtime>(window: Window<R>, state: CoreState) {
     info!("Core state: {:?}", state);
     *LATEST_CORE_STATE.lock() = Some(state.clone());
     window.emit("core-event", state).unwrap();
+
+    // Update tray icon based on new state
+    tray_icon_manager::update_tray_icon(window.app_handle());
 }
 
 fn leaf_callback<R: Runtime>(window: Window<R>, state: LeafState) {
     info!("Leaf state: {:?}", state);
     *LATEST_LEAF_STATE.lock() = Some(state.clone());
     window.emit("leaf-event", state).unwrap();
+
+    // Update tray icon based on new state
+    tray_icon_manager::update_tray_icon(window.app_handle());
 }
 
 fn subscription_state<R: Runtime>(window: Window<R>, state: SubscriptionState) {
@@ -45,6 +65,14 @@ fn connectivity_state<R: Runtime>(window: Window<R>, state: ConnectivityState) {
     info!("Connectivity state: {:?}", state);
     *LATEST_CONNECTIVITY_STATE.lock() = Some(state.clone());
     window.emit("connectivity-event", state).unwrap();
+
+    // Update tray icon based on new state
+    tray_icon_manager::update_tray_icon(window.app_handle());
+}
+
+fn file_watch_callback<R: Runtime>(window: Window<R>, event: FileWatchEvent) {
+    info!("File watch event: {:?}", event);
+    window.emit("file-watch-event", event).unwrap();
 }
 
 #[tauri::command]
@@ -165,7 +193,7 @@ fn detect_linux_system_info<R: Runtime>(
 
 #[tauri::command]
 fn start_connectivity_monitor<R: Runtime>(_app: AppHandle<R>, window: Window<R>, api_port: u16) {
-    leaf_sdk_desktop::start_connectivity_monitor(api_port, None, move |state| {
+    leaf_sdk_desktop::start_connectivity_monitor(api_port, Some(10000), move |state| {
         connectivity_state(window.clone(), state.clone());
     });
 }
@@ -206,6 +234,83 @@ fn get_versions<R: Runtime>(app: AppHandle<R>, _window: Window<R>) -> Result<Str
         "Leaf Core: {} | App: {}",
         leaf_version, app_version
     ))
+}
+
+#[tauri::command]
+fn start_file_watcher<R: Runtime>(
+    _app: AppHandle<R>,
+    window: Window<R>,
+    file_path: String,
+) -> Result<(), String> {
+    let mut watcher_lock = FILE_WATCHER.lock();
+
+    if watcher_lock.is_some() {
+        return Err("File watcher is already running".to_string());
+    }
+
+    let window_clone = window.clone();
+    let watcher = notify::recommended_watcher(move |res: NotifyResult<NotifyEvent>| match res {
+        Ok(event) => {
+            let event_type = match event.kind {
+                notify::EventKind::Create(_) => "create",
+                notify::EventKind::Modify(_) => "modify",
+                notify::EventKind::Remove(_) => "remove",
+                _ => "other",
+            };
+
+            for path in event.paths {
+                let file_event = FileWatchEvent {
+                    path: path.to_string_lossy().to_string(),
+                    event_type: event_type.to_string(),
+                };
+                file_watch_callback(window_clone.clone(), file_event);
+            }
+        }
+        Err(e) => {
+            info!("File watcher error: {:?}", e);
+        }
+    })
+    .map_err(|e| format!("Failed to create watcher: {}", e))?;
+
+    *watcher_lock = Some(watcher);
+
+    let watcher_guard = watcher_lock.as_mut().unwrap();
+    watcher_guard
+        .watch(
+            std::path::Path::new(&file_path),
+            RecursiveMode::NonRecursive,
+        )
+        .map_err(|e| format!("Failed to watch file: {}", e))?;
+
+    info!("Started watching file: {}", file_path);
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_file_watcher<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> Result<(), String> {
+    let mut watcher_lock = FILE_WATCHER.lock();
+
+    if watcher_lock.is_none() {
+        return Err("File watcher is not running".to_string());
+    }
+
+    *watcher_lock = None;
+    info!("Stopped file watcher");
+    Ok(())
+}
+
+#[tauri::command]
+fn is_file_watcher_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
+    FILE_WATCHER.lock().is_some()
+}
+
+#[tauri::command]
+fn watch_sidecar_binary<R: Runtime>(app: AppHandle<R>, window: Window<R>) -> Result<(), String> {
+    let sidecar = app.shell().sidecar("leaf-ipc").unwrap();
+    let command: Command = sidecar.into();
+    let program = command.get_program().to_string_lossy().to_string();
+
+    start_file_watcher(app, window, program)
 }
 
 fn main() {
@@ -258,6 +363,9 @@ fn main() {
             let handle = app.handle();
             tray::create_tray(handle)?;
 
+            // Initialize tray icon with correct initial state
+            tray_icon_manager::init_tray_icon(handle);
+
             // Write wintun.dll
             #[cfg(target_os = "windows")]
             leaf_sdk_desktop::setup_wintun()?;
@@ -304,6 +412,10 @@ fn main() {
             toggle_main_window,
             get_main_window_state,
             get_versions,
+            start_file_watcher,
+            stop_file_watcher,
+            is_file_watcher_running,
+            watch_sidecar_binary,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

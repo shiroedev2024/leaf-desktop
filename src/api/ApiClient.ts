@@ -9,7 +9,7 @@ import { OutboundLastPeerActiveReply } from './OutboundLastPeerActiveReply';
 import { OutboundSinceLastPeerActiveReply } from './OutboundSinceLastPeerActiveReply';
 import { OutboundHealthReply } from './OutboundHealthReply';
 import { FailoverStatusReply } from './FailoverStatusReply';
-import { PingReply } from './PingReply';
+import { CheckConnectivityReply } from './CheckConnectivityReply';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -128,20 +128,10 @@ class ApiClient {
     return response.status === 200 || response.status === 202;
   }
 
-  public async getPing(
-    tcpTarget?: string,
-    udpTarget?: string,
-    timeout?: number
-  ): Promise<PingReply> {
-    const params = new URLSearchParams();
-    if (tcpTarget) params.append('tcp_target', tcpTarget);
-    if (udpTarget) params.append('udp_target', udpTarget);
-    if (timeout !== undefined) params.append('timeout', timeout.toString());
-
-    const queryString = params.toString();
-    const url = `/api/v1/runtime/ping${queryString ? `?${queryString}` : ''}`;
-
-    const response = await this.client.get<PingReply>(url);
+  public async checkConnectivity(): Promise<CheckConnectivityReply> {
+    const response = await this.client.get<CheckConnectivityReply>(
+      `/api/v1/runtime/check_connectivity`
+    );
     return response.data;
   }
 }

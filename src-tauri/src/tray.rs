@@ -1,3 +1,4 @@
+use crate::tray_icon_manager;
 use crate::window_manager::WindowManager;
 use crate::{DAEMONIZE, LATEST_LEAF_STATE};
 use leaf_sdk_desktop::{CoreState, LeafState};
@@ -40,7 +41,7 @@ pub fn create_tray<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
 
 fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
     let leaf_state = LATEST_LEAF_STATE.lock().clone();
-    
+
     if let Some(LeafState::STARTING) = leaf_state {
         let app_clone = app.clone();
         tauri::async_runtime::spawn(async move {
@@ -71,11 +72,12 @@ fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
         }
         (true, false) => {
             let app_clone = app.clone();
+            let app_clone2 = app.clone();
             leaf_sdk_desktop::shutdown_core(DAEMONIZE, move |state| {
                 if let CoreState::ERROR { error } = state {
-                    let app_clone2 = app_clone.clone();
+                    let app_clone3 = app_clone.clone();
                     tauri::async_runtime::spawn(async move {
-                        let _ = app_clone2
+                        let _ = app_clone3
                             .notification()
                             .builder()
                             .title("Leaf VPN")
@@ -83,9 +85,12 @@ fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
                             .show();
                     });
                 }
+
+                // Update tray icon after state change
+                tray_icon_manager::update_tray_icon(&app_clone);
             });
 
-            app.exit(0);
+            app_clone2.exit(0);
         }
         (false, _) => {
             app.exit(0);

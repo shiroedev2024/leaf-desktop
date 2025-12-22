@@ -1,13 +1,15 @@
 import { defineStore } from 'pinia';
 import {
-  UpdateState,
-  UpdateType,
-  UpdateInfo,
-  UpdateProgress,
+  FileWatchEvent,
   LinuxSystemInfo,
   LinuxUpdateResponse,
+  UpdateInfo,
+  UpdateProgress,
+  UpdateState,
+  UpdateType,
 } from '../types/types.ts';
 import { invoke } from '@tauri-apps/api/core';
+import type { Update } from '@tauri-apps/plugin-updater';
 import { check } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { fetch } from '@tauri-apps/plugin-http';
@@ -16,9 +18,9 @@ import { ask } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useLeafStore } from './leaf.ts';
 import { Utils } from '../utils/Utils.ts';
-import type { Update } from '@tauri-apps/plugin-updater';
 import { markRaw } from 'vue';
 import { error, info } from '../utils/logger';
+import { listen } from '@tauri-apps/api/event';
 
 export const useUpdateStore = defineStore('update', {
   state: () => ({
@@ -29,6 +31,7 @@ export const useUpdateStore = defineStore('update', {
     systemInfo: null as LinuxSystemInfo | null,
     isUpdateDialogOpen: false,
     _updateResource: null as Update | null,
+    _fileWatchUnlisten: null as (() => void) | null,
   }),
 
   getters: {
@@ -269,10 +272,137 @@ export const useUpdateStore = defineStore('update', {
       try {
         await openUrl(this.updateInfo.url);
         this.updateState = UpdateState.NotAvailable;
+        await this.startWatchingSidecarBinary();
       } catch (e) {
         this.updateState = UpdateState.Error;
         this.updateError = e instanceof Error ? e.message : String(e);
         error('Error opening download URL:', e);
+      }
+    },
+
+    async startWatchingSidecarBinary(): Promise<void> {
+      if (!this.systemInfo) {
+        return;
+      }
+
+      try {
+        if (this._fileWatchUnlisten) {
+          this._fileWatchUnlisten();
+          this._fileWatchUnlisten = null;
+        }
+
+        this._fileWatchUnlisten = await listen<FileWatchEvent>(
+          'file-watch-event',
+          async (event) => {
+            info('File watch event received:', event.payload);
+            await this.handleSidecarBinaryChange(event.payload);
+          }
+        );
+
+        await invoke('watch_sidecar_binary');
+        info('Started watching sidecar binary for Linux update');
+      } catch (e) {
+        error('Failed to start watching sidecar binary:', e);
+      }
+    },
+
+    async stopWatchingSidecarBinary(): Promise<void> {
+      try {
+        if (this._fileWatchUnlisten) {
+          this._fileWatchUnlisten();
+          this._fileWatchUnlisten = null;
+        }
+
+        const isWatching = await invoke('is_file_watcher_running');
+        if (isWatching) {
+          await invoke('stop_file_watcher');
+          info('Stopped watching sidecar binary');
+        }
+      } catch (e) {
+        error('Failed to stop watching sidecar binary:', e);
+      }
+    },
+
+    async handleSidecarBinaryChange(payload: FileWatchEvent): Promise<void> {
+      info('Sidecar binary changed:', payload);
+
+      if (payload.eventType !== 'modify') {
+        return;
+      }
+
+      await this.stopWatchingSidecarBinary();
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      try {
+        const leafStore = useLeafStore();
+
+        if (await leafStore.isCoreRunning()) {
+          info('Core is running; checking Leaf status');
+
+          if (await leafStore.isLeafRunning()) {
+            const userAgreed = await ask(
+              'The Linux update has been installed. A VPN connection (Leaf) is currently active. To apply the update we need to stop the VPN and restart the application. Do you want to stop the VPN now and restart?',
+              {
+                title: 'Restart to Apply Update',
+                okLabel: 'Yes',
+                cancelLabel: 'No',
+              }
+            );
+
+            if (userAgreed) {
+              info('User agreed to stop Leaf (VPN) and restart');
+              await leafStore.stopLeaf();
+
+              const leafStopped = await Utils.waitFor(
+                async () => !(await leafStore.isLeafRunning()),
+                15000,
+                300
+              );
+              if (!leafStopped) {
+                throw new Error('Timed out waiting for Leaf to stop');
+              }
+
+              info('Stopping core before restart');
+              await leafStore.shutdownCore();
+
+              const coreStopped = await Utils.waitFor(
+                async () => !(await leafStore.isCoreRunning()),
+                15000,
+                300
+              );
+              if (!coreStopped) {
+                throw new Error('Timed out waiting for Core to stop');
+              }
+
+              await relaunch();
+            } else {
+              info(
+                'User cancelled restart; update will apply on next app launch'
+              );
+            }
+          } else {
+            info(
+              'Core is running but VPN is not active; stopping core automatically before restart'
+            );
+            await leafStore.shutdownCore();
+
+            const coreStopped = await Utils.waitFor(
+              async () => !(await leafStore.isCoreRunning()),
+              15000,
+              300
+            );
+            if (!coreStopped) {
+              throw new Error('Timed out waiting for Core to stop');
+            }
+
+            await relaunch();
+          }
+        } else {
+          info('Core is not running; restarting application automatically');
+          await relaunch();
+        }
+      } catch (e) {
+        error('Error handling sidecar binary change:', e);
       }
     },
 
@@ -387,6 +517,9 @@ export const useUpdateStore = defineStore('update', {
         });
         this._updateResource = null;
       }
+      this.stopWatchingSidecarBinary().catch((err) => {
+        void err;
+      });
     },
   },
 });

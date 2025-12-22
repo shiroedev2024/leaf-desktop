@@ -144,3 +144,8 @@ export interface LinuxUpdateResponse {
   url?: string;
   version?: string;
 }
+
+export interface FileWatchEvent {
+  path: string;
+  eventType: string;
+}
