@@ -2726,7 +2726,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-desktop"
-version = "1.2.2"
+version = "1.2.3"
 dependencies = [
  "anyhow",
  "image",
