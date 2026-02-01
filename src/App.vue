@@ -17,12 +17,7 @@
 <script lang="ts">
 import { onMounted, watch, ref, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import {
-  ConnectivityState,
-  DeepLinkState,
-  LeafState,
-  SubscriptionState,
-} from './types/types.ts';
+import { DeepLinkState, LeafState, SubscriptionState } from './types/types.ts';
 import { useLeafStore } from './store/leaf.ts';
 import { useSubscriptionStore } from './store/subscription.ts';
 import { useOutboundsStore } from './store/outbounds.ts';
@@ -37,7 +32,6 @@ import { info, error, debug } from './utils/logger';
 import {
   isPermissionGranted,
   requestPermission,
-  sendNotification,
 } from '@tauri-apps/plugin-notification';
 
 export default {
@@ -101,34 +95,6 @@ export default {
         if (newValue === DeepLinkState.Received) {
           info('navigating to AutoProfile due to deeplink received');
           await router.push('/auto-profile');
-        }
-      }
-    );
-
-    // Notify user when network availability changes from available -> unavailable
-    watch(
-      () => leafStore.connectivityState,
-      async (newValue, oldValue) => {
-        debug('connectivity state changed from', oldValue, 'to', newValue);
-        try {
-          if (
-            oldValue === ConnectivityState.Recovered &&
-            newValue === ConnectivityState.Lost
-          ) {
-            if (
-              (await isPermissionGranted()) &&
-              leafStore.leafState === LeafState.Started
-            ) {
-              sendNotification({
-                title: 'Network disconnected',
-                body: 'No internet. VPN disconnected — Kill Switch active. Traffic blocked; your data is protected.',
-              });
-            } else {
-              debug('Notification permission not granted or Leaf not started');
-            }
-          }
-        } catch (e) {
-          error('Failed to send network notification:', e);
         }
       }
     );

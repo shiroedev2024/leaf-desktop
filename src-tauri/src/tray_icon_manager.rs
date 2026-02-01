@@ -1,5 +1,5 @@
-use crate::{LATEST_CONNECTIVITY_STATE, LATEST_CORE_STATE, LATEST_LEAF_STATE};
-use leaf_sdk_desktop::{ConnectivityState, CoreState, LeafState};
+use crate::{LATEST_CORE_STATE, LATEST_LEAF_STATE};
+use leaf_sdk_desktop::{CoreState, LeafState};
 use log::info;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
@@ -43,7 +43,6 @@ impl TrayIconColor {
 pub fn determine_tray_icon_color() -> TrayIconColor {
     let core_state = LATEST_CORE_STATE.lock().clone();
     let leaf_state = LATEST_LEAF_STATE.lock().clone();
-    let connectivity_state = LATEST_CONNECTIVITY_STATE.lock().clone();
 
     if let Some(CoreState::ERROR { .. }) = core_state {
         return TrayIconColor::Red;
@@ -54,9 +53,6 @@ pub fn determine_tray_icon_color() -> TrayIconColor {
     }
 
     if let Some(LeafState::STARTED) = leaf_state {
-        if let Some(ConnectivityState::LOST) = connectivity_state {
-            return TrayIconColor::Yellow;
-        }
         return TrayIconColor::Green;
     }
 

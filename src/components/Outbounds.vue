@@ -1,6 +1,21 @@
 <template>
   <div v-if="outboundsStore.outboundState === 'Success'" class="space-y-2">
-    <h2 class="text-lg font-semibold mb-4">Outbounds</h2>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold">Outbounds</h2>
+      <button
+        @click="refreshPings"
+        class="px-2 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        :disabled="isRefreshingPings"
+      >
+        <i
+          :class="[
+            'mdi',
+            isRefreshingPings ? 'mdi-loading mdi-spin' : 'mdi-refresh',
+          ]"
+        ></i>
+        Ping
+      </button>
+    </div>
     <ul class="list-none p-0 space-y-2">
       <li
         v-for="outbound in outboundsStore.outbounds"
@@ -13,10 +28,20 @@
             : 'bg-white text-gray-900',
         ]"
       >
-        <div
-          class="flex items-center"
-          v-html="getCountryInfo(outbound.name)"
-        ></div>
+        <div class="flex items-center justify-between">
+          <div
+            class="flex items-center"
+            v-html="getCountryInfo(outbound.name)"
+          ></div>
+          <div class="flex items-center space-x-2">
+            <span
+              :class="getPingClass(outbound.ping_ms)"
+              class="text-sm font-medium"
+            >
+              {{ getPingText(outbound.ping_ms) }}
+            </span>
+          </div>
+        </div>
       </li>
     </ul>
   </div>
@@ -55,7 +80,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent } from 'vue';
+import { defineComponent, ref } from 'vue';
 import { useOutboundsStore } from '../store/outbounds.ts';
 import { usePreferencesStore } from '../store/preferences.ts';
 import { getName, registerLocale } from 'i18n-iso-countries';
@@ -68,6 +93,7 @@ export default defineComponent({
   setup() {
     const outboundsStore = useOutboundsStore();
     const preferencesStore = usePreferencesStore();
+    const isRefreshingPings = ref(false);
 
     registerLocale(en);
 
@@ -95,8 +121,44 @@ export default defineComponent({
       return isoCode;
     };
 
+    const getPingClass = (pingMs: number | null | undefined) => {
+      if (pingMs === null || pingMs === undefined) {
+        return 'text-gray-500';
+      }
+      if (pingMs < 100) return 'text-green-500';
+      if (pingMs < 300) return 'text-yellow-500';
+      if (pingMs < 800) return 'text-orange-500';
+      return 'text-red-500';
+    };
+
+    const getPingText = (pingMs: number | null | undefined) => {
+      if (pingMs === null || pingMs === undefined) {
+        return pingMs === undefined ? 'LOADING' : 'TIMEOUT';
+      }
+      return `${pingMs}ms`;
+    };
+
+    const refreshPings = async () => {
+      isRefreshingPings.value = true;
+
+      // Set loading state immediately
+      outboundsStore.outbounds.forEach((outbound) => {
+        outbound.ping_ms = undefined; // Loading state
+      });
+
+      try {
+        await outboundsStore.refreshPings();
+      } finally {
+        isRefreshingPings.value = false;
+      }
+    };
+
     return {
       getCountryInfo,
+      getPingClass,
+      getPingText,
+      refreshPings,
+      isRefreshingPings,
       outboundsStore,
       preferencesStore,
     };

@@ -1,16 +1,8 @@
 import { defineStore } from 'pinia';
-import {
-  ConnectivityEvent,
-  ConnectivityState,
-  CoreEvent,
-  CoreState,
-  LeafEvent,
-  LeafState,
-} from '../types/types.ts';
+import { CoreEvent, CoreState, LeafEvent, LeafState } from '../types/types.ts';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { info, error, warn } from '../utils/logger';
-import { usePreferencesStore } from './preferences.ts';
 
 export const useLeafStore = defineStore('leaf', {
   state: () => ({
@@ -21,9 +13,6 @@ export const useLeafStore = defineStore('leaf', {
     coreState: CoreState.Stopped as CoreState,
     coreError: '',
     coreUnlistenFn: null as UnlistenFn | null,
-
-    connectivityState: ConnectivityState.Recovered as ConnectivityState,
-    connectivityUnlistenFn: null as UnlistenFn | null,
 
     // Ping monitoring state
     pingTimer: null as number | null,
@@ -105,23 +94,9 @@ export const useLeafStore = defineStore('leaf', {
               break;
             case 'started':
               this.leafState = LeafState.Started;
-              try {
-                const preferencesStore = usePreferencesStore();
-                const apiPort = preferencesStore.leafPreferences.api_port;
-                await invoke('start_connectivity_monitor', {
-                  apiPort: apiPort,
-                });
-              } catch (e) {
-                error('start_connectivity_monitor failed', e);
-              }
               break;
             case 'stopped':
               this.leafState = LeafState.Stopped;
-              try {
-                await invoke('stop_connectivity_monitor');
-              } catch (e) {
-                error('stop_connectivity_monitor failed', e);
-              }
               break;
             case 'reloaded':
               this.leafState = LeafState.Reloaded;
@@ -138,24 +113,6 @@ export const useLeafStore = defineStore('leaf', {
           }
         }
       );
-
-      this.connectivityUnlistenFn = await listen<ConnectivityEvent>(
-        'connectivity-event',
-        async (event) => {
-          info('connectivity event', event);
-
-          const connectivityState = event.payload;
-
-          switch (connectivityState.type) {
-            case 'recovered':
-              this.connectivityState = ConnectivityState.Recovered;
-              break;
-            case 'lost':
-              this.connectivityState = ConnectivityState.Lost;
-              break;
-          }
-        }
-      );
     },
 
     async toggleLeaf(): Promise<void> {
@@ -165,6 +122,7 @@ export const useLeafStore = defineStore('leaf', {
       } catch (e) {
         this.coreState = CoreState.Error;
         this.coreError = e as string;
+        this.leafState = LeafState.Stopped;
         return;
       }
 
@@ -185,11 +143,18 @@ export const useLeafStore = defineStore('leaf', {
     },
 
     async startCore(): Promise<void> {
+      if (this.coreState === CoreState.Started) {
+        return;
+      }
+
+      this.coreState = CoreState.Loading;
+
       try {
         await invoke('start_core');
       } catch (e) {
         this.coreState = CoreState.Error;
         this.coreError = e as string;
+        this.leafState = LeafState.Stopped;
       }
     },
 
@@ -197,15 +162,15 @@ export const useLeafStore = defineStore('leaf', {
       await invoke('shutdown_core');
     },
 
-    async forceShutdownCore(): Promise<void> {
-      await invoke('force_shutdown_core');
-    },
-
     async isCoreRunning(): Promise<boolean> {
       return await invoke('is_core_running');
     },
 
     async startLeaf(): Promise<void> {
+      if (this.leafState === LeafState.Started) {
+        return;
+      }
+
       this.leafState = LeafState.Loading;
 
       // first test config
@@ -330,14 +295,6 @@ export const useLeafStore = defineStore('leaf', {
 
         if (await this.isLeafRunning()) {
           this.leafState = LeafState.Started;
-
-          try {
-            const preferencesStore = usePreferencesStore();
-            const apiPort = preferencesStore.leafPreferences.api_port;
-            await invoke('start_connectivity_monitor', { apiPort: apiPort });
-          } catch (e) {
-            error('start_connectivity_monitor failed', e);
-          }
         } else {
           this.leafState = LeafState.Stopped;
         }
@@ -356,11 +313,6 @@ export const useLeafStore = defineStore('leaf', {
       if (this.coreUnlistenFn) {
         this.coreUnlistenFn();
         this.coreUnlistenFn = null;
-      }
-
-      if (this.connectivityUnlistenFn) {
-        this.connectivityUnlistenFn();
-        this.connectivityUnlistenFn = null;
       }
 
       // Clean up ping timer

@@ -1,4 +1,6 @@
-Update Leaf core
-Update routing assets
-Introduce colorized tray icon
-Implement connectivity monitor
+Updated Leaf core
+Updated assets
+Disabled network monitoring
+Fixed DNS issue on macOS
+Added new protocols
+Fixed known bugs

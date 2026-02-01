@@ -54,15 +54,6 @@
     />
 
     <Message
-      v-if="
-        leafStore.leafState === 'Started' &&
-        leafStore.connectivityState === 'Lost'
-      "
-      type="warning"
-      message="No internet — your network connection dropped. VPN can't connect (not a VPN issue). Kill Switch is active: traffic is blocked and your data is protected."
-    />
-
-    <Message
       v-if="preferencesStore.isExpired"
       type="warning"
       message="Your subscription has expired!"
@@ -88,23 +79,6 @@
       </div>
     </Message>
 
-    <Message v-if="showConnectingDelayMessage" type="info">
-      <div class="w-full flex items-center justify-between text-sm">
-        <p class="m-0">
-          Connecting is taking longer than expected. This may take up to 1
-          minute.
-        </p>
-        <div class="flex-shrink-0">
-          <button
-            @click.stop="handleForceShutdown"
-            class="ml-4 px-3 py-1 text-sm font-medium text-white bg-red-600 rounded hover:bg-red-700 transition-colors"
-          >
-            Force stop core
-          </button>
-        </div>
-      </div>
-    </Message>
-
     <!-- Middle Section (Scrollable) -->
     <div
       v-if="preferencesStore.leafPreferences.last_update_time"
@@ -123,6 +97,7 @@
         :disabled="
           leafStore.leafState == 'Loading' ||
           leafStore.leafState === 'Reloaded' ||
+          leafStore.coreState === 'Loading' ||
           preferencesStore.leafPreferences.last_update_time == undefined
         "
         class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
@@ -139,11 +114,12 @@ import { usePreferencesStore } from '../store/preferences.ts';
 import { useLeafStore } from '../store/leaf.ts';
 import { useSubscriptionStore } from '../store/subscription.ts';
 import { useOutboundsStore } from '../store/outbounds.ts';
+import { LeafState } from '../types/types.ts';
 import Outbounds from '../components/Outbounds.vue';
 import Message from '../components/Message.vue';
 import UpdateDialog from '../components/UpdateDialog.vue';
 import { useUpdateStore } from '../store/update.ts';
-import { onMounted, ref, watch, onUnmounted, computed } from 'vue';
+import { onMounted, ref, computed, watch, onUnmounted } from 'vue';
 import { error } from '../utils/logger';
 
 export default {
@@ -155,42 +131,7 @@ export default {
     const subscriptionStore = useSubscriptionStore();
     const outboundsStore = useOutboundsStore();
     const updateStore = useUpdateStore();
-
-    const showConnectingDelayMessage = ref(false);
-    let connectingDelayTimer: number | null = null;
-
-    watch(
-      () => leafStore.leafState,
-      (newState) => {
-        // when entering Loading, start a 5s timer to show a message if still loading
-        if (newState === 'Loading') {
-          showConnectingDelayMessage.value = false;
-          if (connectingDelayTimer) {
-            clearTimeout(connectingDelayTimer);
-          }
-          connectingDelayTimer = window.setTimeout(() => {
-            if (leafStore.leafState === 'Loading') {
-              showConnectingDelayMessage.value = true;
-            }
-          }, 5000);
-        } else {
-          // clear any pending timer and hide message when not loading
-          if (connectingDelayTimer) {
-            clearTimeout(connectingDelayTimer);
-            connectingDelayTimer = null;
-          }
-          showConnectingDelayMessage.value = false;
-        }
-      },
-      { immediate: true }
-    );
-
-    onUnmounted(() => {
-      if (connectingDelayTimer) {
-        clearTimeout(connectingDelayTimer);
-        connectingDelayTimer = null;
-      }
-    });
+    const pingTimeout = ref<number | null>(null);
 
     onMounted(async () => {
       await preferencesStore.fetchLeafPreferences();
@@ -200,6 +141,41 @@ export default {
         await updateStore.checkForUpdates();
       } catch (e) {
         error('Error initializing update store:', e);
+      }
+    });
+
+    // Watch leaf state changes to auto-ping when started
+    watch(
+      () => leafStore.leafState,
+      async (newValue, oldValue) => {
+        if (newValue === LeafState.Started && oldValue !== LeafState.Started) {
+          // Set initial loading state immediately
+          if (outboundsStore.outbounds.length > 0) {
+            outboundsStore.outbounds.forEach((outbound) => {
+              outbound.ping_ms = undefined; // Loading state
+            });
+          }
+
+          // Clear any existing timeout
+          if (pingTimeout.value) {
+            clearTimeout(pingTimeout.value);
+          }
+
+          // Schedule new timeout and store reference
+          pingTimeout.value = setTimeout(async () => {
+            if (outboundsStore.outbounds.length > 0) {
+              await outboundsStore.refreshPings();
+            }
+          }, 3000); // 3 second delay like in App.vue
+        }
+      }
+    );
+
+    // Cleanup timeout on component unmount
+    onUnmounted(() => {
+      if (pingTimeout.value) {
+        clearTimeout(pingTimeout.value);
+        pingTimeout.value = null;
       }
     });
 
@@ -238,28 +214,18 @@ export default {
       }
     };
 
-    const handleForceShutdown = async () => {
-      try {
-        await leafStore.forceShutdownCore();
-      } catch (e) {
-        error('forceShutdownCore failed', e);
-      }
-    };
-
     return {
       preferencesStore,
       leafStore,
       subscriptionStore,
       outboundsStore,
       updateStore,
-      showConnectingDelayMessage,
       isUpdateDialogOpen,
       showNotification,
       openUpdateDialog,
       closeUpdateDialog,
       handleUpdateAction,
       dismissNotification,
-      handleForceShutdown,
     };
   },
 };

@@ -46,11 +46,6 @@ export enum CoreState {
   Error = 'Error',
 }
 
-export enum ConnectivityState {
-  Recovered = 'Recovered',
-  Lost = 'Lost',
-}
-
 export enum LeafState {
   Stopped = 'Stopped',
   Started = 'Started',
@@ -111,8 +106,6 @@ export interface UpdateProgress {
   total: number;
   percentage: number;
 }
-
-export type ConnectivityEvent = { type: 'recovered' } | { type: 'lost' };
 
 export type CoreEvent =
   | { type: 'starting' }

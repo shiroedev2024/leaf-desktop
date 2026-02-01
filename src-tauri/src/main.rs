@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use leaf_sdk_desktop::{ConnectivityState, CoreState, LeafState, SubscriptionState};
+use leaf_sdk_desktop::{CoreState, LeafState, SubscriptionState};
 use log::info;
 use notify::{Event as NotifyEvent, RecursiveMode, Result as NotifyResult, Watcher};
 use once_cell::sync::Lazy;
@@ -24,8 +24,6 @@ pub const DAEMONIZE: bool = true;
 pub static LATEST_CORE_STATE: Lazy<Mutex<Option<CoreState>>> = Lazy::new(|| Mutex::new(None));
 pub static LATEST_LEAF_STATE: Lazy<Mutex<Option<LeafState>>> = Lazy::new(|| Mutex::new(None));
 pub static LATEST_SUBSCRIPTION_STATE: Lazy<Mutex<Option<SubscriptionState>>> =
-    Lazy::new(|| Mutex::new(None));
-pub static LATEST_CONNECTIVITY_STATE: Lazy<Mutex<Option<ConnectivityState>>> =
     Lazy::new(|| Mutex::new(None));
 pub static FILE_WATCHER: Lazy<Mutex<Option<notify::RecommendedWatcher>>> =
     Lazy::new(|| Mutex::new(None));
@@ -61,15 +59,6 @@ fn subscription_state<R: Runtime>(window: Window<R>, state: SubscriptionState) {
     window.emit("subscription-event", state).unwrap();
 }
 
-fn connectivity_state<R: Runtime>(window: Window<R>, state: ConnectivityState) {
-    info!("Connectivity state: {:?}", state);
-    *LATEST_CONNECTIVITY_STATE.lock() = Some(state.clone());
-    window.emit("connectivity-event", state).unwrap();
-
-    // Update tray icon based on new state
-    tray_icon_manager::update_tray_icon(window.app_handle());
-}
-
 fn file_watch_callback<R: Runtime>(window: Window<R>, event: FileWatchEvent) {
     info!("File watch event: {:?}", event);
     window.emit("file-watch-event", event).unwrap();
@@ -95,13 +84,6 @@ fn is_core_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
 #[tauri::command]
 fn shutdown_core<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
     leaf_sdk_desktop::shutdown_core(DAEMONIZE, move |state| {
-        core_callback(window.clone(), state.clone());
-    });
-}
-
-#[tauri::command]
-fn force_shutdown_core<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
-    leaf_sdk_desktop::force_shutdown_core(DAEMONIZE, move |state| {
         core_callback(window.clone(), state.clone());
     });
 }
@@ -189,23 +171,6 @@ fn detect_linux_system_info<R: Runtime>(
 ) -> Result<helper::LinuxSystemInfo, String> {
     helper::detect_linux_system_info()
         .map_err(|e| format!("detect_linux_system_info failed: {}", e))
-}
-
-#[tauri::command]
-fn start_connectivity_monitor<R: Runtime>(_app: AppHandle<R>, window: Window<R>, api_port: u16) {
-    leaf_sdk_desktop::start_connectivity_monitor(api_port, Some(10000), move |state| {
-        connectivity_state(window.clone(), state.clone());
-    });
-}
-
-#[tauri::command]
-fn is_connectivity_monitor_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
-    leaf_sdk_desktop::is_connectivity_monitor_running()
-}
-
-#[tauri::command]
-fn stop_connectivity_monitor<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) {
-    leaf_sdk_desktop::stop_connectivity_monitor();
 }
 
 #[tauri::command]
@@ -391,7 +356,6 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             start_core,
             shutdown_core,
-            force_shutdown_core,
             is_core_running,
             test_config,
             is_leaf_running,
@@ -405,9 +369,6 @@ fn main() {
             verify_file_integrity,
             ping,
             detect_linux_system_info,
-            start_connectivity_monitor,
-            is_connectivity_monitor_running,
-            stop_connectivity_monitor,
             show_main_window,
             toggle_main_window,
             get_main_window_state,
