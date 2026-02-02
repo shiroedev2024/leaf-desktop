@@ -17,6 +17,7 @@ export function getDefaultPreferences(
     bypass_lan_in_core: true,
     fake_ip: false,
     force_resolve_domain: false,
+    internal_dns_server: false,
     bypass_geoip_list: [],
     bypass_geosite_list: [],
     reject_geoip_list: [],

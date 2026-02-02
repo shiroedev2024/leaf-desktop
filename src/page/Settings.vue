@@ -50,6 +50,12 @@
             label="Force Resolve Domain"
             description="Force domain resolution through configured resolvers"
           />
+
+          <SettingsToggle
+            v-model="preferences.internal_dns_server"
+            label="Enable Inbound DNS Server"
+            description="Enable built-in DNS server for better internal DNS resolution"
+          />
         </SettingsSection>
 
         <!-- Bypass / Reject Lists Section -->
@@ -246,6 +252,8 @@ export default {
         fake_ip: preferencesStore.leafPreferences.fake_ip ?? false,
         force_resolve_domain:
           preferencesStore.leafPreferences.force_resolve_domain ?? false,
+        internal_dns_server:
+          preferencesStore.leafPreferences.internal_dns_server ?? false,
       };
 
       debugMode.value = import.meta.env.DEV;

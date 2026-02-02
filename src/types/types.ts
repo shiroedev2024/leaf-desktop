@@ -15,6 +15,7 @@ export interface LeafPreferences {
   bypass_lan_in_core?: boolean;
   fake_ip?: boolean;
   force_resolve_domain?: boolean;
+  internal_dns_server?: boolean;
   bypass_geoip_list?: string[];
   bypass_geosite_list?: string[];
   reject_geoip_list?: string[];
@@ -33,6 +34,7 @@ export interface UpdateLeafPreferences {
   bypass_lan_in_core: boolean;
   fake_ip: boolean;
   force_resolve_domain: boolean;
+  internal_dns_server: boolean;
   bypass_geoip_list?: string[];
   bypass_geosite_list?: string[];
   reject_geoip_list?: string[];

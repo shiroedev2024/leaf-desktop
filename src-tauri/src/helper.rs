@@ -15,6 +15,7 @@ pub struct UpdateLeafPreferences {
     bypass_lan_in_core: bool,
     fake_ip: bool,
     force_resolve_domain: bool,
+    internal_dns_server: bool,
     bypass_geoip_list: Option<Vec<String>>,
     bypass_geosite_list: Option<Vec<String>>,
     reject_geoip_list: Option<Vec<String>>,
@@ -40,6 +41,7 @@ pub fn set_preferences(preferences: String) -> Result<()> {
         update_preferences.bypass_geosite_list,
         update_preferences.reject_geoip_list,
         update_preferences.reject_geosite_list,
+        update_preferences.internal_dns_server,
     )
 }
 
