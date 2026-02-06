@@ -82,7 +82,7 @@
     <!-- Middle Section (Scrollable) -->
     <div
       v-if="preferencesStore.leafPreferences.last_update_time"
-      class="flex-1 overflow-auto"
+      class="flex-1 overflow-x-hidden overflow-y-auto"
     >
       <Outbounds />
     </div>
@@ -92,19 +92,32 @@
       v-if="preferencesStore.leafPreferences.last_update_time"
       class="flex-shrink-0 mt-4 border-t pt-4"
     >
-      <button
-        @click="leafStore.toggleLeaf()"
-        :disabled="
-          leafStore.leafState == 'Loading' ||
-          leafStore.leafState === 'Reloaded' ||
-          leafStore.coreState === 'Loading' ||
-          preferencesStore.leafPreferences.last_update_time == undefined
-        "
-        class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-      >
-        <i :class="['mr-2', leafStore.leafButtonIcon]"></i>
-        {{ leafStore.leafButtonText }}
-      </button>
+      <div class="flex space-x-2">
+        <!-- Cancel Button - Only show during core loading -->
+        <button
+          v-if="leafStore.coreState === 'Loading' && !leafStore.isCancelling"
+          @click="leafStore.cancelCoreStart()"
+          class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+        >
+          <i class="mdi mdi-cancel mr-2"></i>
+          Cancel
+        </button>
+
+        <!-- Main Start/Stop Button -->
+        <button
+          @click="leafStore.toggleLeaf()"
+          :disabled="
+            leafStore.leafState == 'Loading' ||
+            leafStore.leafState === 'Reloaded' ||
+            (leafStore.coreState === 'Loading' && !leafStore.isCancelling) ||
+            preferencesStore.leafPreferences.last_update_time == undefined
+          "
+          class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+        >
+          <i :class="['mr-2', leafStore.leafButtonIcon]"></i>
+          {{ leafStore.leafButtonText }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

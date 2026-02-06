@@ -1,6 +1,6 @@
 [package]
 name = "leaf-desktop"
-version = "1.2.4"
+version = "1.2.5"
 description = "Leaf Tauri Desktop Application"
 license = "MIT OR Apache-2.0"
 repository = "https://gitlab.com/surfshield-vpn/leaf-desktop"
@@ -14,7 +14,7 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2.4.1", features = [] }
-leaf-build-deps = { version = "0.13.7", registry = "kellnr"}
+leaf-build-deps = { version = "0.13.9", registry = "kellnr"}
 
 [dependencies]
 tauri = { version = "2.9.5", features = ["tray-icon"] }
@@ -43,7 +43,7 @@ parking_lot = "0.12"
 notify = "7.0"
 image = "0.25.9"
 
-leaf_sdk_desktop = { version = "0.6.7", registry = "kellnr" }
+leaf_sdk_desktop = { version = "0.6.8", registry = "kellnr" }
 
 [features]
 # This feature is used for production builds or when a dev server is not specified, DO NOT REMOVE!!

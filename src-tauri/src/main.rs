@@ -77,6 +77,13 @@ fn start_core<R: Runtime>(app: AppHandle<R>, window: Window<R>) -> Result<(), St
 }
 
 #[tauri::command]
+fn force_shutdown_core<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
+    leaf_sdk_desktop::force_shutdown_core(move |state| {
+        core_callback(window.clone(), state.clone());
+    });
+}
+
+#[tauri::command]
 fn is_core_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> bool {
     leaf_sdk_desktop::is_core_running()
 }
@@ -355,6 +362,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             start_core,
+            force_shutdown_core,
             shutdown_core,
             is_core_running,
             test_config,

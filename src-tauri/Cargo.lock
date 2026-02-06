@@ -2258,7 +2258,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.61.2",
+ "windows-core 0.62.2",
 ]
 
 [[package]]
@@ -2711,9 +2711,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "leaf-build-deps"
-version = "0.13.7"
+version = "0.13.9"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "19b7e5fe8bad4f130d995c21af06fd1dccbd526dc2d308a9be431b0c2d4161f1"
+checksum = "92e916fbddb7c1c1b79b2b61d785f4c9ca9bcc3b7e32c459abb5ec1f941d4c83"
 dependencies = [
  "hex",
  "log",
@@ -2726,7 +2726,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-desktop"
-version = "1.2.4"
+version = "1.2.5"
 dependencies = [
  "anyhow",
  "image",
@@ -2785,9 +2785,9 @@ dependencies = [
 
 [[package]]
 name = "leaf_sdk_desktop"
-version = "0.6.7"
+version = "0.6.8"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "8b45eab62d62438f21135993af945eb96d8c7a53f8b21550016b063c787d8493"
+checksum = "a13777d69e437b86a197ae1bd0338f5f820f8e7fe9cb1e3c0595e12c6acb2cc1"
 dependencies = [
  "anyhow",
  "bytes",
@@ -2800,6 +2800,7 @@ dependencies = [
  "leaf-util",
  "libc",
  "log",
+ "nix",
  "runas",
  "serde",
  "serde_json",
@@ -3123,6 +3124,17 @@ name = "new_debug_unreachable"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
+
+[[package]]
+name = "nix"
+version = "0.27.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
+dependencies = [
+ "bitflags 2.10.0",
+ "cfg-if",
+ "libc",
+]
 
 [[package]]
 name = "nodrop"

@@ -1,7 +1,16 @@
 <template>
   <div v-if="outboundsStore.outboundState === 'Success'" class="space-y-2">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="text-lg font-semibold">Outbounds</h2>
+      <div class="flex items-center space-x-2">
+        <button
+          v-if="outboundsStore.selectedSubgroupTag"
+          @click="outboundsStore.setSubgroup(null)"
+          class="p-1 hover:bg-gray-200 rounded-full transition-colors"
+        >
+          <i class="mdi mdi-arrow-left text-xl"></i>
+        </button>
+        <h2 class="text-lg font-semibold">{{ currentTitle }}</h2>
+      </div>
       <button
         @click="refreshPings"
         class="px-2 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -13,33 +22,40 @@
             isRefreshingPings ? 'mdi-loading mdi-spin' : 'mdi-refresh',
           ]"
         ></i>
-        Ping
+        Ping All
       </button>
     </div>
-    <ul class="list-none p-0 space-y-2">
+    <ul class="list-none p-0 px-1 space-y-2">
       <li
-        v-for="outbound in outboundsStore.outbounds"
+        v-for="outbound in outboundsStore.displayOutbounds"
         :key="outbound.name"
-        @click="outboundsStore.changeSelectedOutbound(outbound.name)"
+        @click="handleOutboundClick(outbound)"
         :class="[
-          'p-2 shadow-md rounded-md cursor-pointer',
+          'p-3 shadow-md rounded-lg cursor-pointer transition-all hover:scale-[1.01]',
           outbound.is_selected
             ? 'bg-gray-900 text-white'
-            : 'bg-white text-gray-900',
+            : 'bg-white text-gray-900 hover:bg-gray-50',
         ]"
       >
         <div class="flex items-center justify-between">
           <div
-            class="flex items-center"
-            v-html="getCountryInfo(outbound.name)"
+            class="flex items-center flex-1"
+            v-html="getOutboundDisplayHTML(outbound.name)"
           ></div>
-          <div class="flex items-center space-x-2">
+          <div class="flex items-center space-x-3">
             <span
               :class="getPingClass(outbound.ping_ms)"
-              class="text-sm font-medium"
+              class="text-sm font-bold tabular-nums"
             >
               {{ getPingText(outbound.ping_ms) }}
             </span>
+            <button
+              @click.stop="outboundsStore.pingOutbound(outbound.name)"
+              class="p-1 hover:bg-gray-400/20 rounded-full transition-colors"
+              title="Ping this node"
+            >
+              <i class="mdi mdi-access-point"></i>
+            </button>
           </div>
         </div>
       </li>
@@ -80,11 +96,13 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref } from 'vue';
+import { defineComponent, ref, computed } from 'vue';
 import { useOutboundsStore } from '../store/outbounds.ts';
 import { usePreferencesStore } from '../store/preferences.ts';
 import { getName, registerLocale } from 'i18n-iso-countries';
 import en from 'i18n-iso-countries/langs/en.json';
+import { OutboundUtils } from '../utils/OutboundUtils';
+import { OutboundInfo } from '../api/OutboundInfo.ts';
 import Message from './Message.vue';
 
 export default defineComponent({
@@ -97,28 +115,62 @@ export default defineComponent({
 
     registerLocale(en);
 
-    const getCountryInfo = (isoCode: string) => {
-      if (isoCode === 'AUTO') {
-        return '<span class="emoji">🌐</span> Auto';
+    const currentTitle = computed(() => {
+      const tag = outboundsStore.selectedSubgroupTag;
+      if (!tag) return 'Outbounds';
+      if (tag === 'AUTO') return 'Global Auto';
+
+      // If it's a country code (2 chars)
+      if (tag.length === 2) {
+        return getName(tag, 'en') || tag;
       }
 
-      const getCountryEmoji = (countryCode: string) => {
-        const offset = 127397;
-        return String.fromCodePoint(
-          ...countryCode
-            .toUpperCase()
-            .split('')
-            .map((char: string) => char.charCodeAt(0) + offset)
-        );
-      };
+      return tag;
+    });
 
-      if (isoCode.length === 2) {
-        const emoji = getCountryEmoji(isoCode);
-        const countryName = getName(isoCode, 'en');
-        return `<span class="emoji">${emoji}</span>&nbsp;${countryName}`;
+    const getOutboundDisplayHTML = (tag: string) => {
+      if (tag === 'AUTO') {
+        return '<span class="emoji">🌐</span>&nbsp;<span class="font-medium">Global Auto</span>';
       }
 
-      return isoCode;
+      if (tag.endsWith('_AUTO')) {
+        const countryCode = tag.split('_')[0];
+        const emoji = OutboundUtils.getCountryEmoji(countryCode);
+        return `<span class="emoji">${emoji}</span>&nbsp;<span class="font-medium">${countryCode} Auto</span>`;
+      }
+
+      const nodeDetails = OutboundUtils.parseNodeTag(tag);
+      if (nodeDetails) {
+        const emoji = OutboundUtils.getCountryEmoji(nodeDetails.country);
+        return `
+          <div class="flex flex-col">
+            <div class="flex items-center">
+              <span class="emoji">${emoji}</span>&nbsp;
+              <span class="font-bold">${nodeDetails.region}</span>
+            </div>
+            <span class="text-xs opacity-60 ml-[1.6rem]">${nodeDetails.ip}</span>
+          </div>
+        `;
+      }
+
+      if (tag.length === 2) {
+        const emoji = OutboundUtils.getCountryEmoji(tag);
+        const countryName = getName(tag, 'en');
+        return `<span class="emoji">${emoji}</span>&nbsp;<span class="font-medium">${countryName}</span>`;
+      }
+
+      return `<span class="font-medium">${tag}</span>`;
+    };
+
+    const handleOutboundClick = (outbound: OutboundInfo) => {
+      // If it's a country code (e.g., US) and we're in the main view,
+      // we select it (set OUT -> US) and then enter its subgroup view.
+      if (!outboundsStore.selectedSubgroupTag && outbound.name.length === 2) {
+        outboundsStore.changeSelectedOutbound(outbound.name); // Set OUT -> Country
+        outboundsStore.setSubgroup(outbound.name); // Enter Subgroup
+      } else {
+        outboundsStore.changeSelectedOutbound(outbound.name);
+      }
     };
 
     const getPingClass = (pingMs: number | null | undefined) => {
@@ -133,17 +185,15 @@ export default defineComponent({
 
     const getPingText = (pingMs: number | null | undefined) => {
       if (pingMs === null || pingMs === undefined) {
-        return pingMs === undefined ? 'LOADING' : 'TIMEOUT';
+        return pingMs === undefined ? '...' : 'T/O';
       }
       return `${pingMs}ms`;
     };
 
     const refreshPings = async () => {
       isRefreshingPings.value = true;
-
-      // Set loading state immediately
       outboundsStore.outbounds.forEach((outbound) => {
-        outbound.ping_ms = undefined; // Loading state
+        outbound.ping_ms = undefined;
       });
 
       try {
@@ -154,7 +204,9 @@ export default defineComponent({
     };
 
     return {
-      getCountryInfo,
+      currentTitle,
+      getOutboundDisplayHTML,
+      handleOutboundClick,
       getPingClass,
       getPingText,
       refreshPings,

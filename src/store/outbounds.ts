@@ -8,24 +8,49 @@ export const useOutboundsStore = defineStore('outbounds', {
   state: () => ({
     outboundState: 'Initial' as OutboundState,
     outbounds: [] as OutboundInfo[],
+    selectedSubgroupTag: null as string | null,
   }),
 
-  getters: {},
+  getters: {
+    displayOutbounds: (state) => state.outbounds,
+  },
 
   actions: {
     resetState(): void {
       this.outboundState = OutboundState.Initial;
       this.outbounds = [];
+      this.selectedSubgroupTag = null;
     },
 
     async getOutbounds() {
-      this.outboundState = OutboundState.Loading;
-
       const preferencesStore = usePreferencesStore();
+      const tag = this.selectedSubgroupTag || 'OUT';
+
       try {
-        this.outbounds = (
-          await preferencesStore.api.getSelectOutboundItems('OUT')
-        ).outbounds;
+        const selectedResponse =
+          await preferencesStore.api.getCurrentSelectOutboundItem(tag);
+        const selectedName = selectedResponse.selected;
+
+        if (
+          this.outbounds.length > 0 &&
+          this.outboundState === OutboundState.Success
+        ) {
+          this.outbounds.forEach((o) => {
+            o.is_selected = o.name === selectedName;
+          });
+          if (this.outbounds.some((o) => o.is_selected)) return;
+        }
+
+        this.outboundState = OutboundState.Loading;
+
+        const itemsResponse =
+          await preferencesStore.api.getSelectOutboundItems(tag);
+
+        this.outbounds = itemsResponse.outbounds.map((o) => ({
+          ...o,
+          is_selected: o.name === selectedName,
+        }));
+
         this.outboundState = OutboundState.Success;
       } catch (e) {
         error(e);
@@ -33,14 +58,30 @@ export const useOutboundsStore = defineStore('outbounds', {
       }
     },
 
+    async setSubgroup(tag: string | null) {
+      this.selectedSubgroupTag = tag;
+      this.outbounds = []; // Clear current list to force a full fetch for the new tag
+      await this.getOutbounds();
+    },
+
     async changeSelectedOutbound(outbound: string) {
       const preferencesStore = usePreferencesStore();
 
       try {
-        await preferencesStore.api.setSelectOutboundItem('OUT', outbound);
+        const currentTag = this.selectedSubgroupTag || 'OUT';
 
-        this.outbounds.find((o) => o.is_selected)!.is_selected = false;
-        this.outbounds.find((o) => o.name === outbound)!.is_selected = true;
+        await preferencesStore.api.setSelectOutboundItem(currentTag, outbound);
+
+        if (this.selectedSubgroupTag && this.selectedSubgroupTag !== 'OUT') {
+          await preferencesStore.api.setSelectOutboundItem(
+            'OUT',
+            this.selectedSubgroupTag
+          );
+        }
+
+        this.outbounds.forEach((o) => {
+          o.is_selected = o.name === outbound;
+        });
       } catch (e) {
         error(e);
       }

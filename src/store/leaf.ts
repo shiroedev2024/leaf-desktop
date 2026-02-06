@@ -14,6 +14,8 @@ export const useLeafStore = defineStore('leaf', {
     coreError: '',
     coreUnlistenFn: null as UnlistenFn | null,
 
+    isCancelling: false,
+
     // Ping monitoring state
     pingTimer: null as number | null,
     pingFailureCount: 0,
@@ -156,6 +158,25 @@ export const useLeafStore = defineStore('leaf', {
         this.coreError = e as string;
         this.leafState = LeafState.Stopped;
       }
+    },
+
+    async cancelCoreStart(): Promise<void> {
+      if (this.coreState !== CoreState.Loading || this.isCancelling) {
+        return;
+      }
+
+      this.isCancelling = true;
+
+      try {
+        await invoke('force_shutdown_core');
+      } catch (e) {
+        warn('Failed to force shutdown core:', e);
+      }
+
+      this.coreState = CoreState.Stopped;
+      this.coreError = '';
+      this.leafState = LeafState.Stopped;
+      this.isCancelling = false;
     },
 
     async shutdownCore(): Promise<void> {
