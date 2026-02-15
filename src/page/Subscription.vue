@@ -75,20 +75,121 @@
       </Message>
     </div>
     <div class="flex-shrink-0 mt-4 border-t pt-4">
-      <button
-        @click="importFromClipboard"
-        :disabled="isFetching"
-        class="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-green-500 hover:bg-green-600 text-white focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+      <div class="flex space-x-2">
+        <button
+          @click="importFromClipboard"
+          :disabled="isFetching"
+          class="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
+        >
+          <i class="mdi mdi-clipboard-text mr-2"></i>
+          Import from clipboard
+        </button>
+
+        <button
+          @click="openOfflineDialog"
+          :disabled="isFetching"
+          class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-60"
+        >
+          <i class="mdi mdi-upload mr-2"></i>
+          Offline import
+        </button>
+      </div>
+    </div>
+
+    <!-- Offline Import Dialog -->
+    <div
+      v-if="isOfflineDialogOpen"
+      class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+      @click="closeOfflineDialog"
+    >
+      <div
+        class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4"
+        @click.stop
       >
-        <i class="mdi mdi-clipboard-text"></i>
-        <span>Import from clipboard</span>
-      </button>
+        <div
+          class="px-6 py-4 border-b border-gray-200 flex items-center justify-between"
+        >
+          <h3 class="text-lg font-semibold text-gray-900">Offline import</h3>
+          <button
+            @click="closeOfflineDialog"
+            class="text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <i class="mdi mdi-close text-xl"></i>
+          </button>
+        </div>
+
+        <div class="px-6 py-5 space-y-4">
+          <div class="space-y-2">
+            <label class="text-sm text-gray-700"
+              >Subscription file (.leafsub)</label
+            >
+            <div class="flex gap-2">
+              <input
+                type="text"
+                v-model="offlinePath"
+                placeholder="Select .leafsub file"
+                :disabled="isFetching"
+                class="flex-grow py-2 px-3 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+                readonly
+              />
+              <button
+                @click="pickOfflineFile"
+                :disabled="isFetching"
+                class="py-2 px-3 bg-gray-100 border rounded-md hover:bg-gray-200 focus:outline-none focus:ring focus:ring-blue-500"
+              >
+                Browse
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-1">
+            <label class="text-sm text-gray-700">Passphrase (optional)</label>
+            <input
+              type="password"
+              v-model="passphrase"
+              placeholder="Leave empty if none"
+              :disabled="isFetching"
+              class="w-full py-2 px-3 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
+            />
+          </div>
+
+          <Message
+            v-if="hasError"
+            type="error"
+            :message="subscriptionStore.subscriptionError"
+          />
+        </div>
+
+        <div
+          class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3 rounded-b-lg"
+        >
+          <button
+            @click="closeOfflineDialog"
+            class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="importOffline"
+            :disabled="isFetching || !offlinePath"
+            class="inline-flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring focus:ring-blue-500 disabled:opacity-60"
+          >
+            <i
+              :class="[
+                'mdi',
+                isFetching ? 'mdi-loading mdi-spin' : 'mdi-upload',
+              ]"
+            ></i>
+            <span>{{ isFetching ? 'Updating...' : 'Import offline' }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useSubscriptionStore } from '../store/subscription';
 import { usePreferencesStore } from '../store/preferences';
 import Message from '../components/Message.vue';
@@ -97,6 +198,7 @@ import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { ask, message } from '@tauri-apps/plugin-dialog';
 import { Utils } from '../utils/Utils.ts';
 import { error } from '../utils/logger';
+import { open } from '@tauri-apps/plugin-dialog';
 
 export default {
   name: 'SubscriptionComponent',
@@ -105,6 +207,12 @@ export default {
     const clientId = ref('');
     const subscriptionStore = useSubscriptionStore();
     const preferencesStore = usePreferencesStore();
+    const offlinePath = ref('');
+    const isOfflineDialogOpen = ref(false);
+    const passphrase = ref('');
+    const defaultKeyring = {
+      k1: 'FjBD6zMrxVtHpWqzqsuFmT8uB7RZKmMuO94nT0N5LKo',
+    };
 
     const isFetching = computed(
       () => subscriptionStore.subscriptionState === 'Fetching'
@@ -121,6 +229,76 @@ export default {
         subscriptionStore.updateSubscription(clientId.value);
       }
     };
+
+    const openOfflineDialog = () => {
+      subscriptionStore.subscriptionError = '';
+      isOfflineDialogOpen.value = true;
+    };
+
+    const closeOfflineDialog = () => {
+      if (isFetching.value) return;
+      isOfflineDialogOpen.value = false;
+      offlinePath.value = '';
+      passphrase.value = '';
+    };
+
+    const pickOfflineFile = async () => {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: 'Leaf subscription', extensions: ['leafsub'] }],
+      });
+
+      if (typeof selected === 'string') {
+        offlinePath.value = selected;
+      }
+    };
+
+    const importOffline = async () => {
+      if (!offlinePath.value) {
+        await message('Please select a .leafsub file.', {
+          title: 'Missing file',
+          kind: 'warning',
+        });
+        return;
+      }
+
+      await subscriptionStore.importOfflineSubscription({
+        path: offlinePath.value,
+        passphrase: passphrase.value || null,
+        keyringJson: JSON.stringify(defaultKeyring),
+      });
+    };
+
+    watch(
+      () => subscriptionStore.subscriptionState,
+      async (state) => {
+        if (state === 'Success') {
+          await preferencesStore.fetchLeafPreferences();
+
+          if (preferencesStore.leafPreferences.client_id) {
+            clientId.value = preferencesStore.leafPreferences.client_id;
+          }
+
+          if (isOfflineDialogOpen.value) {
+            closeOfflineDialog();
+          }
+        }
+      }
+    );
+
+    watch(
+      () => subscriptionStore.offlineImportPath,
+      async (path) => {
+        console.log('offline import path changed to', path);
+        if (!path) return;
+
+        offlinePath.value = path;
+        passphrase.value = '';
+        openOfflineDialog();
+        subscriptionStore.offlineImportPath = '';
+      }
+    );
 
     const importFromClipboard = async () => {
       try {
@@ -173,6 +351,13 @@ export default {
       subscriptionButtonText,
       handleSubscription,
       importFromClipboard,
+      importOffline,
+      pickOfflineFile,
+      offlinePath,
+      isOfflineDialogOpen,
+      passphrase,
+      openOfflineDialog,
+      closeOfflineDialog,
       preferencesStore,
       subscriptionStore,
     };

@@ -9,6 +9,7 @@ export const useSubscriptionStore = defineStore('subscription', {
     subscriptionState: 'Initial' as SubscriptionState,
     subscriptionError: '',
     unlistenFn: null as UnlistenFn | null,
+    offlineImportPath: '',
   }),
 
   getters: {
@@ -38,6 +39,10 @@ export const useSubscriptionStore = defineStore('subscription', {
           const subscriptionState = event.payload;
 
           switch (subscriptionState.type) {
+            case 'updating':
+              this.subscriptionState = SubscriptionState.Fetching;
+              this.subscriptionError = '';
+              break;
             case 'success':
               this.subscriptionState = SubscriptionState.Success;
               break;
@@ -56,6 +61,21 @@ export const useSubscriptionStore = defineStore('subscription', {
       await invoke('update_subscription', { clientId: clientId });
     },
 
+    async importOfflineSubscription(payload: {
+      path: string;
+      passphrase: string | null;
+      keyringJson: string;
+    }) {
+      this.subscriptionState = SubscriptionState.Fetching;
+      this.subscriptionError = '';
+
+      await invoke('import_offline_subscription', {
+        path: payload.path,
+        passphrase: payload.passphrase,
+        keyringJson: payload.keyringJson,
+      });
+    },
+
     async autoUpdateSubscription() {
       this.subscriptionState = SubscriptionState.Fetching;
 
@@ -67,6 +87,10 @@ export const useSubscriptionStore = defineStore('subscription', {
         this.unlistenFn();
         this.unlistenFn = null;
       }
+    },
+
+    setOfflineImportPath(path: string) {
+      this.offlineImportPath = path;
     },
   },
 });

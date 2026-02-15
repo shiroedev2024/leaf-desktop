@@ -33,6 +33,8 @@ import {
   isPermissionGranted,
   requestPermission,
 } from '@tauri-apps/plugin-notification';
+import { listen } from '@tauri-apps/api/event';
+import { invoke } from '@tauri-apps/api/core';
 
 export default {
   components: {
@@ -48,6 +50,7 @@ export default {
     const router = useRouter();
 
     const loading = ref(true);
+    let unlistenFileOpen: (() => void) | null = null;
 
     watch(
       () => leafStore.leafState,
@@ -128,9 +131,39 @@ export default {
       loading.value = false;
 
       try {
+        const pending =
+          (await invoke<string[]>('get_pending_leafsub_paths')) || [];
+        if (pending.length > 0) {
+          await router.push('/subscription');
+          subscriptionStore.setOfflineImportPath(pending[0]);
+        }
+      } catch (e) {
+        error('Error fetching pending leafsub paths:', e);
+      }
+
+      try {
         await initializeApp();
       } catch (e) {
         error('Error initializing app:', e);
+      }
+
+      try {
+        unlistenFileOpen = await listen<string>(
+          'file-opened',
+          async (event) => {
+            console.log('file opened', event.payload);
+            const path = event.payload;
+            if (!path || !path.toLowerCase().endsWith('.leafsub')) {
+              return;
+            }
+
+            await router.push('/subscription');
+
+            subscriptionStore.setOfflineImportPath(path);
+          }
+        );
+      } catch (e) {
+        error('Error registering file-opened listener:', e);
       }
     });
 
@@ -138,6 +171,11 @@ export default {
       await deeplinkStore.dispose();
       await leafStore.dispose();
       await subscriptionStore.dispose();
+
+      if (unlistenFileOpen) {
+        unlistenFileOpen();
+        unlistenFileOpen = null;
+      }
 
       updateStore.resetUpdateState();
 

@@ -4,7 +4,7 @@ use log::info;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use tauri::image::Image;
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Runtime};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayIconColor {

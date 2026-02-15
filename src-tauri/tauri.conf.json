@@ -32,6 +32,17 @@
     "externalBin": [
       "./bin/leaf-ipc"
     ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "leafsub"
+        ],
+        "name": "Leaf Subscription",
+        "description": "Leaf VPN offline subscription file",
+        "role": "Editor",
+        "mimeType": "text/plain"
+      }
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -72,5 +83,5 @@
     }
   },
   "productName": "Leaf VPN",
-  "version": "1.7.4"
+  "version": "1.7.5"
 }

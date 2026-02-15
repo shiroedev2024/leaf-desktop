@@ -27,6 +27,13 @@ pub static LATEST_SUBSCRIPTION_STATE: Lazy<Mutex<Option<SubscriptionState>>> =
     Lazy::new(|| Mutex::new(None));
 pub static FILE_WATCHER: Lazy<Mutex<Option<notify::RecommendedWatcher>>> =
     Lazy::new(|| Mutex::new(None));
+pub static PENDING_LEAFSUB_PATHS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(Vec::new()));
+
+fn leaf_sidecar_program<R: Runtime>(app: &AppHandle<R>) -> String {
+    let sidecar = app.shell().sidecar("leaf-ipc").unwrap();
+    let command: Command = sidecar.into();
+    command.get_program().to_string_lossy().to_string()
+}
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -59,6 +66,26 @@ fn subscription_state<R: Runtime>(window: Window<R>, state: SubscriptionState) {
     window.emit("subscription-event", state).unwrap();
 }
 
+fn emit_leafsub_paths<R: Runtime>(app: &AppHandle<R>, paths: &[String]) {
+    let window = window_manager::WindowManager::get_main_window(app);
+    if let Some(win) = window {
+        tauri::async_runtime::block_on(window_manager::WindowManager::show_main_window(app));
+        for path in paths {
+            if path.to_lowercase().ends_with(".leafsub") {
+                PENDING_LEAFSUB_PATHS.lock().push(path.clone());
+                let _ = win.emit("file-opened", path.clone());
+            }
+        }
+    } else {
+        let mut pending = PENDING_LEAFSUB_PATHS.lock();
+        for path in paths {
+            if path.to_lowercase().ends_with(".leafsub") {
+                pending.push(path.clone());
+            }
+        }
+    }
+}
+
 fn file_watch_callback<R: Runtime>(window: Window<R>, event: FileWatchEvent) {
     info!("File watch event: {:?}", event);
     window.emit("file-watch-event", event).unwrap();
@@ -66,9 +93,7 @@ fn file_watch_callback<R: Runtime>(window: Window<R>, event: FileWatchEvent) {
 
 #[tauri::command]
 fn start_core<R: Runtime>(app: AppHandle<R>, window: Window<R>) -> Result<(), String> {
-    let sidecar = app.shell().sidecar("leaf-ipc").unwrap();
-    let command: Command = sidecar.into();
-    let program = command.get_program().to_string_lossy().to_string();
+    let program = leaf_sidecar_program(&app);
 
     leaf_sdk_desktop::start_core(program, DAEMONIZE, move |state| {
         core_callback(window.clone(), state.clone());
@@ -144,6 +169,19 @@ fn update_subscription<R: Runtime>(_app: AppHandle<R>, window: Window<R>, client
 }
 
 #[tauri::command]
+fn import_offline_subscription<R: Runtime>(
+    _app: AppHandle<R>,
+    window: Window<R>,
+    path: String,
+    passphrase: Option<String>,
+    keyring_json: String,
+) {
+    leaf_sdk_desktop::import_offline_subscription(path, passphrase, keyring_json, move |state| {
+        subscription_state(window.clone(), state.clone());
+    });
+}
+
+#[tauri::command]
 fn verify_file_integrity<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> Result<(), String> {
     leaf_sdk_desktop::verify_file_integrity()
         .map_err(|e| format!("verify_file_integrity failed: {}", e))
@@ -152,6 +190,14 @@ fn verify_file_integrity<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> 
 #[tauri::command]
 fn ping<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> Result<String, String> {
     leaf_sdk_desktop::ping().map_err(|e| format!("ping failed: {}", e))
+}
+
+#[tauri::command]
+fn get_pending_leafsub_paths<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -> Vec<String> {
+    let mut pending = PENDING_LEAFSUB_PATHS.lock();
+    let result = pending.clone();
+    pending.clear();
+    result
 }
 
 #[tauri::command]
@@ -278,9 +324,7 @@ fn is_file_watcher_running<R: Runtime>(_app: AppHandle<R>, _window: Window<R>) -
 
 #[tauri::command]
 fn watch_sidecar_binary<R: Runtime>(app: AppHandle<R>, window: Window<R>) -> Result<(), String> {
-    let sidecar = app.shell().sidecar("leaf-ipc").unwrap();
-    let command: Command = sidecar.into();
-    let program = command.get_program().to_string_lossy().to_string();
+    let program = leaf_sidecar_program(&app);
 
     start_file_watcher(app, window, program)
 }
@@ -290,10 +334,8 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
             info!("Single instance triggered with args: {:?}", argv);
 
-            let app_clone = app.clone();
-            tauri::async_runtime::spawn(async move {
-                let _ = window_manager::WindowManager::show_main_window(&app_clone).await;
-            });
+            let paths: Vec<String> = argv.into_iter().skip(1).collect();
+            emit_leafsub_paths(&app, &paths);
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_process::init())
@@ -340,8 +382,11 @@ fn main() {
 
             // Write wintun.dll
             #[cfg(target_os = "windows")]
-            leaf_sdk_desktop::setup_wintun()?;
-
+            {
+                let program = leaf_sidecar_program(&app.handle());
+                let wintun_path = format!("{}\\wintun.dll", program);
+                leaf_sdk_desktop::setup_wintun(wintun_path)?;
+            }
             // update assets
             let version = app.package_info().version.clone();
             leaf_sdk_desktop::update_assets(version.major, version.minor, version.patch)?;
@@ -350,6 +395,11 @@ fn main() {
             {
                 use tauri_plugin_deep_link::DeepLinkExt;
                 app.deep_link().register_all()?;
+            }
+
+            let initial_paths: Vec<String> = std::env::args().skip(1).collect();
+            if !initial_paths.is_empty() {
+                emit_leafsub_paths(&handle, &initial_paths);
             }
 
             Ok(())
@@ -372,6 +422,7 @@ fn main() {
             reload_leaf,
             auto_update_subscription,
             update_subscription,
+            import_offline_subscription,
             get_preferences,
             set_preferences,
             verify_file_integrity,
@@ -385,11 +436,16 @@ fn main() {
             stop_file_watcher,
             is_file_watcher_running,
             watch_sidecar_binary,
+            get_pending_leafsub_paths,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
             if let RunEvent::ExitRequested { .. } = event {
+                #[cfg(target_os = "windows")]
+                if let Err(e) = leaf_sdk_desktop::remove_wintun_dll() {
+                    error!("Failed to remove wintun.dll: {}", e);
+                }
                 info!("Process exiting...");
             }
         });
