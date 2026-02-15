@@ -10,6 +10,10 @@ use std::env;
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager, RunEvent, Runtime, Window};
 use tauri_plugin_shell::ShellExt;
+
+#[cfg(windows)]
+use log::error;
+
 mod helper;
 mod tray;
 mod tray_icon_manager;
