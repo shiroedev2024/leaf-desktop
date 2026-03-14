@@ -2,13 +2,15 @@ name: 'Release Tauri App'
 
 on:
   push:
-    branches:
-      - main
+    tags: 
+      - 'v*.*.*'  # Only trigger on version tags like v2.2.0
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
   create-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     outputs:
       app_version: ${{ steps.app-version.outputs.version }}
     steps:
@@ -38,12 +40,14 @@ jobs:
             --notes-file release_note.txt \
             --draft
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
   # Merged build job using matrix for all platforms
   build:
     needs: create-release
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -145,12 +149,14 @@ jobs:
             fi
           done
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
   # Final step - publish the release after all builds are done
   publish-release:
     needs: [ create-release, build ]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Only run if all builds succeeded
     if: success()
     steps:
@@ -215,7 +221,7 @@ jobs:
           
           cat download_table.md
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Get Original Release Notes
         id: original-notes
@@ -243,4 +249,4 @@ jobs:
             --draft=false \
             --notes-file combined_notes.md
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ github.token }}

@@ -2902,7 +2902,7 @@ dependencies = [
 
 [[package]]
 name = "leaf-desktop"
-version = "1.2.5"
+version = "1.2.9"
 dependencies = [
  "anyhow",
  "image",
@@ -2935,9 +2935,9 @@ dependencies = [
 
 [[package]]
 name = "leaf-util"
-version = "0.4.2"
+version = "0.4.5"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "89da60eefcb512d4f1b1a57d72dadd196e549ec2b1bcbfedf326397dc45d71f8"
+checksum = "23cff4cecae694b67ba4f545a113af25a8e22e8ebd72148a1583f4ce91a1b81e"
 dependencies = [
  "anyhow",
  "argon2",
@@ -2965,9 +2965,9 @@ dependencies = [
 
 [[package]]
 name = "leaf_sdk_desktop"
-version = "0.7.0"
+version = "0.7.7"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "58480918df4f7f513ec71c281f69c72d6861d67394b60ef9c30143df2978bf8d"
+checksum = "1617fc22cf88d730a4a6df437b9f5e734c1bf2a44c7b9bf5d30a59c98a38b480"
 dependencies = [
  "anyhow",
  "bytes",

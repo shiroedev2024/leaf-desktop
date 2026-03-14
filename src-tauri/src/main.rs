@@ -379,18 +379,25 @@ fn main() {
         )
         .setup(move |app| {
             let handle = app.handle();
-            tray::create_tray(handle)?;
+            tray::create_tray(&handle.clone())?;
 
             // Initialize tray icon with correct initial state
-            tray_icon_manager::init_tray_icon(handle);
+            tray_icon_manager::init_tray_icon(&handle.clone());
 
             // Write wintun.dll
             #[cfg(target_os = "windows")]
             {
                 let program = leaf_sidecar_program(&app.handle());
-                let wintun_path = format!("{}\\wintun.dll", program);
+                let program_path = std::path::Path::new(&program);
+                let wintun_path = program_path
+                    .parent()
+                    .unwrap_or(program_path)
+                    .join("wintun.dll")
+                    .to_string_lossy()
+                    .to_string();
                 leaf_sdk_desktop::setup_wintun(wintun_path)?;
             }
+
             // update assets
             let version = app.package_info().version.clone();
             leaf_sdk_desktop::update_assets(version.major, version.minor, version.patch)?;
