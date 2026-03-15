@@ -363,7 +363,7 @@ export const useUpdateStore = defineStore('update', {
               }
 
               info('Stopping core before restart');
-              await leafStore.forceShutdownCore();
+              await leafStore.shutdownCore();
 
               const coreStopped = await Utils.waitFor(
                 async () => !(await leafStore.isCoreRunning()),
@@ -384,7 +384,7 @@ export const useUpdateStore = defineStore('update', {
             info(
               'Core is running but VPN is not active; stopping core automatically before restart'
             );
-            await leafStore.forceShutdownCore();
+            await leafStore.shutdownCore();
 
             const coreStopped = await Utils.waitFor(
               async () => !(await leafStore.isCoreRunning()),
@@ -439,7 +439,7 @@ export const useUpdateStore = defineStore('update', {
               }
 
               info('Stopping core before update');
-              await leafStore.forceShutdownCore();
+              await leafStore.shutdownCore();
 
               const coreStopped = await Utils.waitFor(
                 async () => !(await leafStore.isCoreRunning()),
@@ -458,7 +458,7 @@ export const useUpdateStore = defineStore('update', {
             info(
               'Core is running but VPN is not active; stopping core automatically before update'
             );
-            await leafStore.forceShutdownCore();
+            await leafStore.shutdownCore();
 
             const coreStopped = await Utils.waitFor(
               async () => !(await leafStore.isCoreRunning()),

@@ -168,7 +168,7 @@ export const useLeafStore = defineStore('leaf', {
       this.isCancelling = true;
 
       try {
-        await invoke('force_shutdown_core');
+        await this.forceShutdownCore();
       } catch (e) {
         warn('Failed to force shutdown core:', e);
       }
