@@ -2887,9 +2887,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "leaf-build-deps"
-version = "0.14.1"
+version = "0.14.2"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "3499e760d54ebfe279bc78950cc479acf794982ef8c9734f39a99efa33c12db9"
+checksum = "99dcf888f53b553b2ef9d90c6d33f0f9c463db8b90036aec69f8101213c0df11"
 dependencies = [
  "hex",
  "log",
@@ -2965,9 +2965,9 @@ dependencies = [
 
 [[package]]
 name = "leaf_sdk_desktop"
-version = "0.7.7"
+version = "0.7.8"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "1617fc22cf88d730a4a6df437b9f5e734c1bf2a44c7b9bf5d30a59c98a38b480"
+checksum = "2dc936267c3e1b59fa3ab813be952235d8d9128e8f69af3828bc4b3d3c1c2ea1"
 dependencies = [
  "anyhow",
  "bytes",

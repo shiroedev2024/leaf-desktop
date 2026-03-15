@@ -183,6 +183,10 @@ export const useLeafStore = defineStore('leaf', {
       await invoke('shutdown_core');
     },
 
+    async forceShutdownCore(): Promise<void> {
+      await invoke('force_shutdown_core');
+    },
+
     async isCoreRunning(): Promise<boolean> {
       return await invoke('is_core_running');
     },
