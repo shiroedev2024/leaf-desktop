@@ -1,6 +1,3 @@
-Updated Leaf core
-Updated assets
-Disabled network monitoring
-Fixed DNS issue on macOS
-Added new protocols
-Fixed known bugs
+Removed old KCP protocol
+Enhancer DNS handling
+Fix Some issues of WS protocol
