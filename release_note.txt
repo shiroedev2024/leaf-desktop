@@ -1,3 +1,2 @@
-Removed old KCP protocol
-Enhancer DNS handling
-Fix Some issues of WS protocol
+Add new MPTP protocol specially for Russia
+Improve VOIP calls and DNS speeds

@@ -167,9 +167,16 @@ fn auto_update_subscription<R: Runtime>(_app: AppHandle<R>, window: Window<R>) {
 #[tauri::command]
 fn update_subscription<R: Runtime>(_app: AppHandle<R>, window: Window<R>, client_id: String) {
     // Pass `None` for tls and fragment to let the library auto-select the best options.
-    leaf_sdk_desktop::update_subscription(None, None, client_id, move |state| {
-        subscription_state(window.clone(), state.clone());
-    });
+    leaf_sdk_desktop::update_subscription(
+        None,
+        None,
+        client_id,
+        None,
+        None,
+        move |state: SubscriptionState| {
+            subscription_state(window.clone(), state.clone());
+        },
+    );
 }
 
 #[tauri::command]
