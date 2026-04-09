@@ -12,7 +12,7 @@ fn prepare_sidecar() -> Result<(), Box<dyn std::error::Error>> {
     LeafBuilder::new()
         .cache_dir("./sidecar_cache")
         .output_dir("./bin")
-        .version("1.1.2")
+        .version("1.1.4")
         .build()?;
     Ok(())
 }
