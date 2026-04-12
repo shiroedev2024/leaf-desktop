@@ -2481,7 +2481,7 @@ dependencies = [
  "js-sys",
  "log",
  "wasm-bindgen",
- "windows-core 0.62.2",
+ "windows-core 0.61.2",
 ]
 
 [[package]]
@@ -3013,9 +3013,9 @@ dependencies = [
 
 [[package]]
 name = "leaf-util"
-version = "0.5.5"
+version = "0.5.6"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "990ddf757426efa85c85ecac10f1970c428c5872dcb438a120e333d412e89e63"
+checksum = "98a06cf323ace73eb4c48523839412bc0b1f532d0514047b208e324d99dbb08d"
 dependencies = [
  "anyhow",
  "argon2",
@@ -3043,9 +3043,9 @@ dependencies = [
 
 [[package]]
 name = "leaf_sdk_desktop"
-version = "1.1.5"
+version = "1.1.6"
 source = "sparse+https://cargo.surfshield.org/api/v1/crates/"
-checksum = "f52a3cd8a88af8a4fd6db409cdde5ed27f30eb3545224e3d6632221ff44af50f"
+checksum = "f661dabe748a89f585c8cea0268042215fe8b66d7376c9a2fe10f7f821caebba"
 dependencies = [
  "anyhow",
  "bytes",
