@@ -1,2 +1,4 @@
-Add new MPTP protocol specially for Russia
-Improve VOIP calls and DNS speeds
+Add new Stealth protocol
+Add new SSH protocol
+Add new method to fetch client ID for Russian users
+Improve connection speeds
