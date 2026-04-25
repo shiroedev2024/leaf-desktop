@@ -2,6 +2,7 @@ use crate::tray_icon_manager;
 use crate::window_manager::WindowManager;
 use crate::{DAEMONIZE, LATEST_LEAF_STATE};
 use leaf_sdk_desktop::{CoreState, LeafState};
+use log::error;
 use tauri::menu::{MenuBuilder, MenuItemBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Runtime};
@@ -49,7 +50,7 @@ fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
                 .notification()
                 .builder()
                 .title("Leaf VPN")
-                .body("Please wait until VPN finishes starting before quitting.")
+                .body("Please wait until the VPN finishes connecting before quitting.")
                 .show();
         });
         return;
@@ -66,7 +67,7 @@ fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
                     .notification()
                     .builder()
                     .title("Leaf VPN")
-                    .body("Please first stop Leaf VPN before quitting.")
+                    .body("Please disconnect the VPN before closing the application.")
                     .show();
             });
         }
@@ -74,16 +75,26 @@ fn handle_quit<R: Runtime>(app: &AppHandle<R>) {
             let app_clone = app.clone();
             let app_clone2 = app.clone();
             leaf_sdk_desktop::shutdown_core(DAEMONIZE, move |state| {
-                if let CoreState::ERROR { error } = state {
-                    let app_clone3 = app_clone.clone();
-                    tauri::async_runtime::spawn(async move {
-                        let _ = app_clone3
-                            .notification()
-                            .builder()
-                            .title("Leaf VPN")
-                            .body(format!("Failed to shutdown core: {}", error))
-                            .show();
-                    });
+                match state {
+                    CoreState::ERROR { error } => {
+                        let app_clone3 = app_clone.clone();
+                        tauri::async_runtime::spawn(async move {
+                            let _ = app_clone3
+                                .notification()
+                                .builder()
+                                .title("Leaf VPN")
+                                .body(format!("Failed to shutdown core: {}", error))
+                                .show();
+                        });
+                    }
+                    CoreState::STOPPED => {
+                        // Remove wintun.dll after shutting down core
+                        #[cfg(target_os = "windows")]
+                        if let Err(e) = leaf_sdk_desktop::remove_wintun_dll() {
+                            error!("Failed to remove wintun.dll: {}", e);
+                        }
+                    }
+                    _ => {}
                 }
 
                 // Update tray icon after state change

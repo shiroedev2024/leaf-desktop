@@ -10,6 +10,8 @@ import { OutboundSinceLastPeerActiveReply } from './OutboundSinceLastPeerActiveR
 import { OutboundHealthReply } from './OutboundHealthReply';
 import { FailoverStatusReply } from './FailoverStatusReply';
 import { CheckConnectivityReply } from './CheckConnectivityReply';
+import { SpeedTestStatusReply } from './SpeedTestStatusReply';
+import { MptpStatusReply } from './MptpStatusReply';
 
 class ApiClient {
   private client: AxiosInstance;
@@ -27,8 +29,22 @@ class ApiClient {
     return response.data;
   }
 
+  public async getUsageByUserId(userId: string): Promise<UsageReply> {
+    const response = await this.client.get<UsageReply>(
+      `/api/v1/runtime/usage/json?userId=${userId}`
+    );
+    return response.data;
+  }
+
   public async getStats(): Promise<Stat[]> {
     const response = await this.client.get<Stat[]>(`/api/v1/runtime/stat/json`);
+    return response.data;
+  }
+
+  public async getRecentStats(): Promise<Stat[]> {
+    const response = await this.client.get<Stat[]>(
+      `/api/v1/runtime/stat/recent/json`
+    );
     return response.data;
   }
 
@@ -110,6 +126,22 @@ class ApiClient {
   ): Promise<FailoverStatusReply> {
     const response = await this.client.get<FailoverStatusReply>(
       `/api/v1/app/outbound/failover/status?outbound=${outbound}`
+    );
+    return response.data;
+  }
+
+  public async getSpeedtestStatus(
+    outbound: string
+  ): Promise<SpeedTestStatusReply> {
+    const response = await this.client.get<SpeedTestStatusReply>(
+      `/api/v1/app/outbound/speedtest/status?outbound=${outbound}`
+    );
+    return response.data;
+  }
+
+  public async getMptpStatus(outbound: string): Promise<MptpStatusReply> {
+    const response = await this.client.get<MptpStatusReply>(
+      `/api/v1/app/outbound/mptp/status?outbound=${outbound}`
     );
     return response.data;
   }

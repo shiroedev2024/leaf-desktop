@@ -17,37 +17,44 @@ export const useLeafStore = defineStore('leaf', {
     isCancelling: false,
 
     // Ping monitoring state
-    pingTimer: null as number | null,
+    pingTimer: null as ReturnType<typeof setInterval> | null,
     pingFailureCount: 0,
     pingIntervalMs: 5000, // 5 seconds
     maxPingFailures: 2, // Reset state after 2 consecutive failures
+
+    // Startup timeout state
+    startTimeoutTimer: null as ReturnType<typeof setTimeout> | null,
   }),
 
   getters: {
     leafButtonIcon: (state) => {
-      switch (state.leafState) {
-        case 'Started':
-          return 'mdi mdi-stop';
-        case 'Loading':
-          return 'mdi mdi-loading mdi-spin';
-        case 'Reloaded':
-          return 'mdi mdi-refresh';
-        default:
-          return 'mdi mdi-play';
+      if (state.leafState === LeafState.Started) {
+        return 'mdi mdi-power'; // modern disconnect icon
       }
+      if (
+        state.leafState === LeafState.Loading ||
+        state.leafState === LeafState.Reloaded ||
+        state.coreState === CoreState.Loading
+      ) {
+        return 'mdi mdi-loading mdi-spin';
+      }
+      return 'mdi mdi-shield-check-outline'; // modern connect icon
     },
 
     leafButtonText: (state) => {
-      switch (state.leafState) {
-        case 'Started':
-          return 'Stop';
-        case 'Loading':
-          return 'Loading...';
-        case 'Reloaded':
-          return 'Reloaded';
-        default:
-          return 'Start';
+      if (state.leafState === LeafState.Started) {
+        return 'Disconnect';
       }
+      if (
+        state.leafState === LeafState.Loading ||
+        state.leafState === LeafState.Reloaded
+      ) {
+        return 'Starting VPN...';
+      }
+      if (state.coreState === CoreState.Loading) {
+        return 'Starting Core...';
+      }
+      return 'Connect';
     },
   },
 
@@ -73,11 +80,13 @@ export const useLeafStore = defineStore('leaf', {
               this.coreState = CoreState.Stopped;
               this.leafState = LeafState.Stopped;
               this.stopPingTimer();
+              this.clearStartTimeout();
               break;
             case 'error':
               this.coreState = CoreState.Error;
               this.coreError = coreState.data.error;
               this.stopPingTimer();
+              this.clearStartTimeout();
               break;
           }
         }
@@ -96,25 +105,49 @@ export const useLeafStore = defineStore('leaf', {
               break;
             case 'started':
               this.leafState = LeafState.Started;
+              this.clearStartTimeout();
               break;
             case 'stopped':
               this.leafState = LeafState.Stopped;
+              this.clearStartTimeout();
               break;
             case 'reloaded':
               this.leafState = LeafState.Reloaded;
               setTimeout(async () => {
                 if (await this.isLeafRunning()) {
                   this.leafState = LeafState.Started;
+                  this.clearStartTimeout();
                 }
               }, 1000);
               break;
             case 'error':
               this.leafState = LeafState.Error;
               this.leafError = leafState.data.error;
+              this.clearStartTimeout();
               break;
           }
         }
       );
+    },
+
+    clearStartTimeout() {
+      if (this.startTimeoutTimer) {
+        clearTimeout(this.startTimeoutTimer);
+        this.startTimeoutTimer = null;
+      }
+    },
+
+    beginStartTimeout() {
+      this.clearStartTimeout();
+      this.startTimeoutTimer = setTimeout(async () => {
+        if (this.leafState !== LeafState.Started) {
+          warn('Connection timed out after 35 seconds. Aborting.');
+          this.leafError = 'Connection timed out. Please try again.';
+          this.leafState = LeafState.Error;
+          await this.cancelCoreStart();
+          await this.forceShutdownCore();
+        }
+      }, 35000); // 35 seconds timeout
     },
 
     async toggleLeaf(): Promise<void> {
@@ -128,10 +161,11 @@ export const useLeafStore = defineStore('leaf', {
         return;
       }
 
-      if (this.leafState == LeafState.Started) {
+      if (this.leafState === LeafState.Started) {
         await this.stopLeaf();
       } else {
-        if (this.coreState != CoreState.Started) {
+        this.beginStartTimeout();
+        if (this.coreState !== CoreState.Started) {
           await this.startCore();
           return;
         }
@@ -157,6 +191,7 @@ export const useLeafStore = defineStore('leaf', {
         this.coreState = CoreState.Error;
         this.coreError = e as string;
         this.leafState = LeafState.Stopped;
+        this.clearStartTimeout();
       }
     },
 
@@ -166,6 +201,7 @@ export const useLeafStore = defineStore('leaf', {
       }
 
       this.isCancelling = true;
+      this.clearStartTimeout();
 
       try {
         await this.forceShutdownCore();
@@ -204,6 +240,7 @@ export const useLeafStore = defineStore('leaf', {
       } catch (e) {
         this.leafState = LeafState.Error;
         this.leafError = e as string;
+        this.clearStartTimeout();
         return;
       }
 
@@ -212,10 +249,12 @@ export const useLeafStore = defineStore('leaf', {
       } catch (e) {
         this.leafState = LeafState.Error;
         this.leafError = e as string;
+        this.clearStartTimeout();
       }
     },
 
     async stopLeaf(): Promise<void> {
+      this.clearStartTimeout();
       await invoke('stop_leaf');
     },
 
@@ -306,6 +345,7 @@ export const useLeafStore = defineStore('leaf', {
     resetLeafState(): void {
       info('Resetting leaf store state due to external core stop');
       this.stopPingTimer();
+      this.clearStartTimeout();
 
       this.coreState = CoreState.Stopped;
       this.coreError = '';
@@ -340,8 +380,8 @@ export const useLeafStore = defineStore('leaf', {
         this.coreUnlistenFn = null;
       }
 
-      // Clean up ping timer
       this.stopPingTimer();
+      this.clearStartTimeout();
     },
 
     async getVersions(): Promise<string> {

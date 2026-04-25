@@ -1,7 +1,6 @@
 <template>
   <div class="h-full flex flex-col p-4 space-y-4">
     <!-- Messages Section -->
-    <!-- Inline Update Notification moved from App.vue -->
     <Message
       v-if="showNotification"
       type="info"
@@ -11,11 +10,10 @@
       <div class="w-full flex items-center justify-between space-x-4">
         <div class="flex items-center space-x-3">
           <div class="text-sm text-blue-800">
-            <span class="font-medium">A new version</span>
+            <span class="font-medium">A new version is available:</span>
             <span class="font-semibold ml-1">{{
               updateStore.updateInfo?.version
             }}</span>
-            <span class="ml-2 text-gray-600">— Click to download.</span>
           </div>
         </div>
 
@@ -40,7 +38,7 @@
 
     <UpdateDialog :is-open="isUpdateDialogOpen" @close="closeUpdateDialog" />
 
-    <!-- Messages Section -->
+    <!-- Error/Warning Messages -->
     <Message
       v-if="leafStore.leafState === 'Error'"
       type="error"
@@ -56,28 +54,46 @@
     <Message
       v-if="preferencesStore.isExpired"
       type="warning"
-      message="Your subscription has expired!"
+      message="Your subscription has expired."
     />
 
     <Message
       v-if="preferencesStore.isTrafficReached"
       type="warning"
-      message="Your traffic limit has been reached!"
+      message="Your traffic limit has been reached."
     />
 
-    <Message
+    <!-- Empty State / Ad Banner -->
+    <div
       v-if="!preferencesStore.leafPreferences.last_update_time"
-      type="info"
+      class="flex-1 flex flex-col items-center justify-center p-6 text-center bg-white rounded-lg shadow-sm border border-gray-100"
     >
-      <div>
-        <p class="text-sm">
-          Begin by adding a client ID to start using the service.
-        </p>
-        <router-link to="/subscription" class="text-blue-500 mt-2 inline-block">
-          Add Client ID
-        </router-link>
+      <div
+        class="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mb-4"
+      >
+        <i class="mdi mdi-rocket-launch-outline text-3xl text-blue-500"></i>
       </div>
-    </Message>
+      <h2 class="text-xl font-bold text-gray-900 mb-2">Welcome to Lite VPN</h2>
+      <p class="text-gray-600 mb-6 max-w-md leading-relaxed">
+        Begin by adding a Client ID to start using the service. If you don't
+        have a provider yet, you can obtain one instantly through our official
+        Telegram bot.
+      </p>
+      <div class="flex flex-col sm:flex-row gap-3">
+        <router-link
+          to="/subscription"
+          class="px-5 py-2.5 bg-gray-900 text-white font-medium rounded-lg hover:bg-gray-800 transition-colors"
+        >
+          <i class="mdi mdi-key-variant mr-2"></i>Add Client ID
+        </router-link>
+        <button
+          @click="openTelegramBot"
+          class="px-5 py-2.5 bg-[#0088cc] text-white font-medium rounded-lg hover:bg-[#0077b3] transition-colors shadow-sm"
+        >
+          <i class="mdi mdi-telegram mr-2"></i>Get a Provider
+        </button>
+      </div>
+    </div>
 
     <!-- Middle Section (Scrollable) -->
     <div
@@ -97,7 +113,7 @@
         <button
           v-if="leafStore.coreState === 'Loading' && !leafStore.isCancelling"
           @click="leafStore.cancelCoreStart()"
-          class="px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+          class="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
         >
           <i class="mdi mdi-cancel mr-2"></i>
           Cancel
@@ -106,13 +122,11 @@
         <!-- Main Start/Stop Button -->
         <button
           @click="leafStore.toggleLeaf()"
-          :disabled="
-            leafStore.leafState == 'Loading' ||
-            leafStore.leafState === 'Reloaded' ||
-            (leafStore.coreState === 'Loading' && !leafStore.isCancelling) ||
-            preferencesStore.leafPreferences.last_update_time == undefined
-          "
-          class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+          :disabled="isButtonDisabled"
+          :class="[
+            'flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white focus:outline-none focus:ring-2 focus:ring-offset-2 transition-all duration-300 ease-in-out',
+            buttonClassState,
+          ]"
         >
           <i :class="['mr-2', leafStore.leafButtonIcon]"></i>
           {{ leafStore.leafButtonText }}
@@ -134,6 +148,7 @@ import UpdateDialog from '../components/UpdateDialog.vue';
 import { useUpdateStore } from '../store/update.ts';
 import { onMounted, ref, computed, watch, onUnmounted } from 'vue';
 import { error } from '../utils/logger';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 export default {
   name: 'DashboardComponent',
@@ -144,7 +159,7 @@ export default {
     const subscriptionStore = useSubscriptionStore();
     const outboundsStore = useOutboundsStore();
     const updateStore = useUpdateStore();
-    const pingTimeout = ref<number | null>(null);
+    const pingTimeout = ref<ReturnType<typeof setTimeout> | null>(null);
 
     onMounted(async () => {
       await preferencesStore.fetchLeafPreferences();
@@ -162,13 +177,6 @@ export default {
       () => leafStore.leafState,
       async (newValue, oldValue) => {
         if (newValue === LeafState.Started && oldValue !== LeafState.Started) {
-          // Set initial loading state immediately
-          if (outboundsStore.outbounds.length > 0) {
-            outboundsStore.outbounds.forEach((outbound) => {
-              outbound.ping_ms = undefined; // Loading state
-            });
-          }
-
           // Clear any existing timeout
           if (pingTimeout.value) {
             clearTimeout(pingTimeout.value);
@@ -179,7 +187,7 @@ export default {
             if (outboundsStore.outbounds.length > 0) {
               await outboundsStore.refreshPings();
             }
-          }, 3000); // 3 second delay like in App.vue
+          }, 3000); // 3 second delay
         }
       }
     );
@@ -209,6 +217,32 @@ export default {
       );
     });
 
+    // Modernized UX conditions
+    const isLoading = computed(() => {
+      return (
+        leafStore.leafState === 'Loading' ||
+        leafStore.leafState === 'Reloaded' ||
+        (leafStore.coreState === 'Loading' && !leafStore.isCancelling)
+      );
+    });
+
+    const isButtonDisabled = computed(() => {
+      return (
+        isLoading.value ||
+        preferencesStore.leafPreferences.last_update_time === undefined
+      );
+    });
+
+    const buttonClassState = computed(() => {
+      if (leafStore.leafState === 'Started') {
+        return 'bg-red-500 hover:bg-red-600 focus:ring-red-500';
+      }
+      if (isLoading.value) {
+        return 'bg-blue-400 cursor-wait animate-pulse';
+      }
+      return 'bg-blue-500 hover:bg-blue-600 focus:ring-blue-500';
+    });
+
     const openUpdateDialog = () => updateStore.openUpdateDialog();
     const closeUpdateDialog = () => updateStore.closeUpdateDialog();
 
@@ -227,6 +261,10 @@ export default {
       }
     };
 
+    const openTelegramBot = async () => {
+      await openUrl('https://t.me/offical_lite_vpn_bot');
+    };
+
     return {
       preferencesStore,
       leafStore,
@@ -235,10 +273,13 @@ export default {
       updateStore,
       isUpdateDialogOpen,
       showNotification,
+      isButtonDisabled,
+      buttonClassState,
       openUpdateDialog,
       closeUpdateDialog,
       handleUpdateAction,
       dismissNotification,
+      openTelegramBot,
     };
   },
 };

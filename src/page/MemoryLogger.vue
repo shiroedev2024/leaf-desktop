@@ -12,7 +12,7 @@
       </router-link>
 
       <!-- Filters and Action Buttons -->
-      <div class="flex items-center space-x-3">
+      <div class="flex flex-wrap items-center gap-3">
         <!-- Search Input -->
         <input
           v-model="searchTerm"
@@ -40,6 +40,22 @@
 
         <!-- Action Buttons -->
         <button
+          @click="copyLogs"
+          class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-sm font-medium text-white rounded-lg shadow transition-colors"
+        >
+          <i
+            :class="[
+              'mdi',
+              copied ? 'mdi-check text-green-400' : 'mdi-content-copy',
+              'mr-2',
+            ]"
+          ></i>
+          {{ copied ? 'Copied!' : 'Copy All' }}
+        </button>
+
+        <div class="w-px h-6 bg-gray-300 mx-1 hidden sm:block"></div>
+
+        <button
           @click="toggleLogs"
           :class="{
             'bg-red-500 hover:bg-red-600': isLogging,
@@ -49,6 +65,22 @@
         >
           <i :class="['mdi', isLogging ? 'mdi-stop' : 'mdi-play', 'mr-2']"></i>
           {{ isLogging ? 'Stop Logs' : 'Start Logs' }}
+        </button>
+
+        <button
+          @click="toggleWordWrap"
+          class="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-sm font-medium text-white rounded-lg shadow transition-colors"
+        >
+          <i
+            :class="[
+              'mdi',
+              wordWrapEnabled
+                ? 'mdi-wrap'
+                : 'mdi-format-text-wrapping-overflow',
+              'mr-2',
+            ]"
+          ></i>
+          Wrap: {{ wordWrapEnabled ? 'ON' : 'OFF' }}
         </button>
 
         <button
@@ -82,13 +114,16 @@
     <!-- Logs Container -->
     <div
       ref="logsContainer"
-      class="flex-1 bg-gray-900 text-gray-100 rounded-lg p-4 overflow-y-auto font-mono text-sm shadow-inner"
+      class="flex-1 bg-[#1e1e1e] text-gray-300 rounded-lg p-4 overflow-x-auto overflow-y-auto font-mono text-[13px] shadow-inner selection:bg-blue-500/50"
     >
       <div
         v-for="(log, index) in filteredLogs"
         :key="index"
-        :class="getLogClass(log)"
-        class="mb-2 leading-relaxed whitespace-pre-wrap"
+        :class="[
+          getLogClass(log),
+          wordWrapEnabled ? 'whitespace-pre-wrap break-all' : 'whitespace-pre',
+        ]"
+        class="mb-1 leading-relaxed hover:bg-white/5 px-1 rounded-sm"
       >
         {{ log }}
       </div>
@@ -97,9 +132,10 @@
 </template>
 
 <script lang="ts">
-import { ref, onMounted, onBeforeUnmount, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, nextTick } from 'vue';
 import { usePreferencesStore } from '../store/preferences';
 import { error } from '../utils/logger';
+import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
 export default {
   name: 'MemoryLogger',
@@ -111,8 +147,10 @@ export default {
     const loggingInterval = ref<number | null>(null);
     const logsContainer = ref<HTMLElement | null>(null);
     const autoScrollEnabled = ref(true);
+    const wordWrapEnabled = ref(true);
     const searchTerm = ref('');
     const selectedLevel = ref('ERROR');
+    const copied = ref(false);
 
     // Allowed levels mapping based on selected level
     const allowedLevels = computed(() => {
@@ -184,9 +222,12 @@ export default {
           200,
           logs.value.length
         );
-        logs.value.push(...response.messages);
-        if (autoScrollEnabled.value) {
-          scrollToBottom();
+        if (response.messages.length > 0) {
+          logs.value.push(...response.messages);
+          if (autoScrollEnabled.value) {
+            await nextTick(); // Wait for DOM to update before calculating scrollHeight
+            scrollToBottom();
+          }
         }
       } catch (err) {
         error('Error fetching logs:', err);
@@ -203,6 +244,26 @@ export default {
 
     const toggleAutoScroll = () => {
       autoScrollEnabled.value = !autoScrollEnabled.value;
+      if (autoScrollEnabled.value) {
+        nextTick(() => scrollToBottom());
+      }
+    };
+
+    const toggleWordWrap = () => {
+      wordWrapEnabled.value = !wordWrapEnabled.value;
+      if (autoScrollEnabled.value) {
+        nextTick(() => scrollToBottom());
+      }
+    };
+
+    const copyLogs = async () => {
+      try {
+        await writeText(filteredLogs.value.join('\n'));
+        copied.value = true;
+        setTimeout(() => (copied.value = false), 2000);
+      } catch (err) {
+        error('Failed to copy logs', err);
+      }
     };
 
     // Log Styling
@@ -233,9 +294,13 @@ export default {
       getLogClass,
       filteredLogs,
       autoScrollEnabled,
+      wordWrapEnabled,
       searchTerm,
       toggleAutoScroll,
+      toggleWordWrap,
       selectedLevel,
+      copyLogs,
+      copied,
     };
   },
 };

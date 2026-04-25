@@ -208,7 +208,7 @@ export default defineComponent({
 
     const menuItems = [
       { name: 'Dashboard', route: '/dashboard', icon: 'mdi-home' },
-      { name: 'Subscriptions', route: '/subscription', icon: 'mdi-account' },
+      { name: 'Subscription', route: '/subscription', icon: 'mdi-account' },
       { name: 'Settings', route: '/settings', icon: 'mdi-cog' },
     ];
 

@@ -99,6 +99,19 @@ fn file_watch_callback<R: Runtime>(window: Window<R>, event: FileWatchEvent) {
 fn start_core<R: Runtime>(app: AppHandle<R>, window: Window<R>) -> Result<(), String> {
     let program = leaf_sidecar_program(&app);
 
+    // Write wintun.dll before starting core
+    #[cfg(target_os = "windows")]
+    {
+        let program_path = std::path::Path::new(&program);
+        let wintun_path = program_path
+            .parent()
+            .unwrap_or(program_path)
+            .join("wintun.dll")
+            .to_string_lossy()
+            .to_string();
+        leaf_sdk_desktop::setup_wintun(wintun_path).map_err(|e| e.to_string())?;
+    }
+
     leaf_sdk_desktop::start_core(program, DAEMONIZE, move |state| {
         core_callback(window.clone(), state.clone());
     })
@@ -391,20 +404,6 @@ fn main() {
             // Initialize tray icon with correct initial state
             tray_icon_manager::init_tray_icon(&handle.clone());
 
-            // Write wintun.dll
-            #[cfg(target_os = "windows")]
-            {
-                let program = leaf_sidecar_program(&app.handle());
-                let program_path = std::path::Path::new(&program);
-                let wintun_path = program_path
-                    .parent()
-                    .unwrap_or(program_path)
-                    .join("wintun.dll")
-                    .to_string_lossy()
-                    .to_string();
-                leaf_sdk_desktop::setup_wintun(wintun_path)?;
-            }
-
             // update assets
             let version = app.package_info().version.clone();
             leaf_sdk_desktop::update_assets(version.major, version.minor, version.patch)?;
@@ -418,6 +417,20 @@ fn main() {
             let initial_paths: Vec<String> = std::env::args().skip(1).collect();
             if !initial_paths.is_empty() {
                 emit_leafsub_paths(&handle, &initial_paths);
+            }
+
+            // Write wintun.dll before starting core
+            #[cfg(target_os = "windows")]
+            {
+                let program = leaf_sidecar_program(app.app_handle());
+                let program_path = std::path::Path::new(&program);
+                let wintun_path = program_path
+                    .parent()
+                    .unwrap_or(program_path)
+                    .join("wintun.dll")
+                    .to_string_lossy()
+                    .to_string();
+                leaf_sdk_desktop::setup_wintun(wintun_path)?;
             }
 
             Ok(())
@@ -460,11 +473,13 @@ fn main() {
         .expect("error while building tauri application")
         .run(|_app_handle, event| {
             if let RunEvent::ExitRequested { .. } = event {
+                info!("Process exiting...");
+
+                // Remove wintun.dll after shutting down core
                 #[cfg(target_os = "windows")]
                 if let Err(e) = leaf_sdk_desktop::remove_wintun_dll() {
                     error!("Failed to remove wintun.dll: {}", e);
                 }
-                info!("Process exiting...");
             }
         });
 }

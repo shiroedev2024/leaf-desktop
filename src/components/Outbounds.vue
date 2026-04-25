@@ -12,8 +12,9 @@
         <h2 class="text-lg font-semibold">{{ currentTitle }}</h2>
       </div>
       <button
+        v-if="outboundsStore.selectedSubgroupTag"
         @click="refreshPings"
-        class="px-2 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        class="px-2 py-1 bg-blue-500 text-white rounded-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
         :disabled="isRefreshingPings"
       >
         <i
@@ -25,24 +26,40 @@
         Ping All
       </button>
     </div>
-    <ul class="list-none p-0 px-1 space-y-2">
+
+    <!-- Smooth Transition Group for list items -->
+    <transition-group
+      name="outbounds-list"
+      tag="ul"
+      class="list-none p-0 px-1 space-y-2 relative"
+    >
       <li
         v-for="outbound in outboundsStore.displayOutbounds"
         :key="outbound.name"
         @click="handleOutboundClick(outbound)"
         :class="[
-          'p-3 shadow-md rounded-lg cursor-pointer transition-all hover:scale-[1.01]',
+          'p-3 shadow-sm rounded-lg cursor-pointer transition-all duration-200 border border-transparent',
           outbound.is_selected
-            ? 'bg-gray-900 text-white'
-            : 'bg-white text-gray-900 hover:bg-gray-50',
+            ? 'bg-gray-900 text-white ring-2 ring-gray-900 ring-offset-1'
+            : 'bg-white text-gray-900 hover:bg-gray-50 hover:border-gray-200 hover:shadow-md',
         ]"
       >
         <div class="flex items-center justify-between">
           <div
-            class="flex items-center flex-1"
+            class="flex items-center flex-1 truncate pr-2"
             v-html="getOutboundDisplayHTML(outbound.name)"
           ></div>
-          <div class="flex items-center space-x-3">
+
+          <!-- Group/Country Indicator Chevron -->
+          <div
+            v-if="isGroup(outbound.name)"
+            class="flex items-center text-gray-400"
+          >
+            <i class="mdi mdi-chevron-right text-xl"></i>
+          </div>
+
+          <!-- Individual Node Ping Stats -->
+          <div v-else class="flex items-center space-x-3">
             <span
               :class="getPingClass(outbound.ping_ms)"
               class="text-sm font-bold tabular-nums"
@@ -51,7 +68,7 @@
             </span>
             <button
               @click.stop="outboundsStore.pingOutbound(outbound.name)"
-              class="p-1 hover:bg-gray-400/20 rounded-full transition-colors"
+              class="p-1 hover:bg-gray-400/20 rounded-full transition-colors focus:outline-none"
               title="Ping this node"
             >
               <i class="mdi mdi-access-point"></i>
@@ -59,7 +76,7 @@
           </div>
         </div>
       </li>
-    </ul>
+    </transition-group>
   </div>
 
   <Message v-else-if="outboundsStore.outboundState === 'Error'" type="error">
@@ -67,7 +84,7 @@
       <span>Error loading outbounds</span>
       <button
         @click="outboundsStore.getOutbounds()"
-        class="ml-2 px-2 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500"
+        class="ml-2 px-2 py-1 bg-red-500 text-white rounded-md hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 transition-colors"
       >
         <i class="mdi mdi-refresh"></i>
         Retry
@@ -81,7 +98,7 @@
       preferencesStore.leafPreferences.last_update_time
     "
     type="info"
-    message="Start to see outbounds"
+    message="Connect to the VPN to view available nodes."
   />
 
   <!-- Loading state indicator -->
@@ -128,38 +145,44 @@ export default defineComponent({
       return tag;
     });
 
+    const isGroup = (tag: string) => outboundsStore.isGroupTag(tag);
+
+    const getFlagHtml = (code: string) => {
+      return `<img src="/flags/${code.toLowerCase()}.png" class="w-5 h-[15px] object-cover rounded-sm inline-block shadow-sm" alt="${code}" />`;
+    };
+
     const getOutboundDisplayHTML = (tag: string) => {
       if (tag === 'AUTO') {
-        return '<span class="emoji">🌐</span>&nbsp;<span class="font-medium">Global Auto</span>';
+        return `<i class="mdi mdi-earth text-blue-500 text-xl mr-2"></i><span class="font-medium">Global Auto</span>`;
       }
 
       if (tag.endsWith('_AUTO')) {
         const countryCode = tag.split('_')[0];
-        const emoji = OutboundUtils.getCountryEmoji(countryCode);
-        return `<span class="emoji">${emoji}</span>&nbsp;<span class="font-medium">${countryCode} Auto</span>`;
+        const flag = getFlagHtml(countryCode);
+        return `<span class="flex items-center">${flag}&nbsp;<span class="font-medium ml-1">${countryCode} Auto</span></span>`;
       }
 
       const nodeDetails = OutboundUtils.parseNodeTag(tag);
       if (nodeDetails) {
-        const emoji = OutboundUtils.getCountryEmoji(nodeDetails.country);
+        const flag = getFlagHtml(nodeDetails.country);
         return `
-          <div class="flex flex-col">
-            <div class="flex items-center">
-              <span class="emoji">${emoji}</span>&nbsp;
-              <span class="font-bold">${nodeDetails.region}</span>
+          <div class="flex flex-col truncate">
+            <div class="flex items-center truncate">
+              ${flag}&nbsp;
+              <span class="font-bold truncate ml-1">${nodeDetails.region}</span>
             </div>
-            <span class="text-xs opacity-60 ml-[1.6rem]">${nodeDetails.ip}</span>
+            <span class="text-xs opacity-60 ml-[1.6rem] truncate">${nodeDetails.ip}</span>
           </div>
         `;
       }
 
       if (tag.length === 2) {
-        const emoji = OutboundUtils.getCountryEmoji(tag);
+        const flag = getFlagHtml(tag);
         const countryName = getName(tag, 'en');
-        return `<span class="emoji">${emoji}</span>&nbsp;<span class="font-medium">${countryName}</span>`;
+        return `<span class="flex items-center">${flag}&nbsp;<span class="font-medium truncate ml-1">${countryName}</span></span>`;
       }
 
-      return `<span class="font-medium">${tag}</span>`;
+      return `<span class="font-medium truncate">${tag}</span>`;
     };
 
     const handleOutboundClick = (outbound: OutboundInfo) => {
@@ -192,8 +215,11 @@ export default defineComponent({
 
     const refreshPings = async () => {
       isRefreshingPings.value = true;
+      // Set to undefined to show loading '...' for non-group items before pinging
       outboundsStore.outbounds.forEach((outbound) => {
-        outbound.ping_ms = undefined;
+        if (!isGroup(outbound.name)) {
+          outbound.ping_ms = undefined;
+        }
       });
 
       try {
@@ -205,6 +231,7 @@ export default defineComponent({
 
     return {
       currentTitle,
+      isGroup,
       getOutboundDisplayHTML,
       handleOutboundClick,
       getPingClass,
@@ -218,4 +245,22 @@ export default defineComponent({
 });
 </script>
 
-<style scoped></style>
+<style scoped>
+.outbounds-list-move,
+.outbounds-list-enter-active,
+.outbounds-list-leave-active {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.outbounds-list-enter-from,
+.outbounds-list-leave-to {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
+/* Ensure leave transitions don't block enter transitions */
+.outbounds-list-leave-active {
+  position: absolute;
+  width: 100%;
+}
+</style>

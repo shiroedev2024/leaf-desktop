@@ -36,19 +36,19 @@
             v-model="preferences.bypass_lan_in_core"
             :disabled="!preferences.bypass_lan"
             label="Bypass LAN In Core"
-            description="Apply LAN bypass rules inside the core"
+            description="Apply LAN bypass rules inside the VPN core rather than the system routing table"
           />
 
           <SettingsToggle
             v-model="preferences.fake_ip"
             label="Fake IP"
-            description="Enable generating fake IP addresses for DNS resolution"
+            description="Return fake IP addresses for DNS queries to prevent DNS leaks"
           />
 
           <SettingsToggle
             v-model="preferences.force_resolve_domain"
             label="Force Resolve Domain"
-            description="Force domain resolution through configured resolvers"
+            description="Resolve domains to IPs before applying routing rules"
           />
 
           <SettingsToggle
@@ -56,6 +56,14 @@
             label="Enable Inbound DNS Server"
             description="Enable built-in DNS server for better internal DNS resolution"
           />
+
+          <Message type="warning" class="mt-4 text-sm">
+            <i class="mdi mdi-alert mr-1"></i>
+            <strong>Note:</strong> Changing any LAN Bypass settings modifies
+            core system routing. You must completely
+            <strong>Disconnect and Reconnect</strong> the VPN for these changes
+            to take effect.
+          </Message>
         </SettingsSection>
 
         <!-- Bypass / Reject Lists Section -->
@@ -63,28 +71,92 @@
           title="Bypass / Reject Lists"
           icon="mdi mdi-shield-outline"
         >
+          <Message type="info" class="mb-4 text-sm">
+            <ul class="list-disc pl-4 space-y-1">
+              <li>
+                <strong>GeoIP</strong> entries must be 2-letter ISO country
+                codes (e.g., <code>ir</code>, <code>ru</code>, <code>cn</code>).
+                Do not use IP addresses or CIDRs.
+              </li>
+              <li>
+                <strong>Geosite</strong> entries must be v2ray geosite
+                categories (e.g., <code>category-ads</code>). Do not use domains
+                or regex.
+              </li>
+            </ul>
+          </Message>
+
+          <!-- Quick Presets -->
+          <div class="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <span class="block text-sm font-semibold text-gray-700 mb-3"
+              >Quick Presets</span
+            >
+            <div class="flex flex-wrap gap-2">
+              <button
+                @click="applyPreset('ir')"
+                class="flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-blue-50 hover:border-blue-300 text-sm focus:outline-none transition-colors"
+              >
+                <img
+                  src="/flags/ir.png"
+                  class="w-5 h-[15px] object-cover rounded-sm mr-2 shadow-sm"
+                  alt="IR"
+                />
+                Bypass Iran
+              </button>
+              <button
+                @click="applyPreset('ru')"
+                class="flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-blue-50 hover:border-blue-300 text-sm focus:outline-none transition-colors"
+              >
+                <img
+                  src="/flags/ru.png"
+                  class="w-5 h-[15px] object-cover rounded-sm mr-2 shadow-sm"
+                  alt="RU"
+                />
+                Bypass Russia
+              </button>
+              <button
+                @click="applyPreset('cn')"
+                class="flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-blue-50 hover:border-blue-300 text-sm focus:outline-none transition-colors"
+              >
+                <img
+                  src="/flags/cn.png"
+                  class="w-5 h-[15px] object-cover rounded-sm mr-2 shadow-sm"
+                  alt="CN"
+                />
+                Bypass China
+              </button>
+              <button
+                @click="applyBlockAds()"
+                class="flex items-center px-3 py-1.5 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-red-50 hover:border-red-300 text-sm focus:outline-none transition-colors"
+              >
+                <i class="mdi mdi-shield-off text-red-500 mr-2 text-lg"></i>
+                Block Ads
+              </button>
+            </div>
+          </div>
+
           <SettingsListEditor
             v-model="preferences.bypass_geoip_list"
             label="Bypass GeoIP List"
-            description="List of GeoIP entries to bypass (one per line or comma-separated)"
+            description="GeoIP country codes to bypass (comma-separated or one per line)"
           />
 
           <SettingsListEditor
             v-model="preferences.bypass_geosite_list"
             label="Bypass Geosite List"
-            description="List of Geosite entries to bypass (one per line or comma-separated)"
+            description="Geosite categories to bypass (comma-separated or one per line)"
           />
 
           <SettingsListEditor
             v-model="preferences.reject_geoip_list"
             label="Reject GeoIP List"
-            description="List of GeoIP entries to reject (one per line or comma-separated)"
+            description="GeoIP country codes to reject (comma-separated or one per line)"
           />
 
           <SettingsListEditor
             v-model="preferences.reject_geosite_list"
             label="Reject Geosite List"
-            description="List of Geosite entries to reject (one per line or comma-separated)"
+            description="Geosite categories to reject (comma-separated or one per line)"
           />
         </SettingsSection>
 
@@ -233,6 +305,30 @@ export default {
       }
     };
 
+    const applyPreset = (code: string) => {
+      if (!preferences.value.bypass_geoip_list?.includes(code)) {
+        preferences.value.bypass_geoip_list = [
+          ...(preferences.value.bypass_geoip_list || []),
+          code,
+        ];
+      }
+      if (!preferences.value.bypass_geosite_list?.includes(code)) {
+        preferences.value.bypass_geosite_list = [
+          ...(preferences.value.bypass_geosite_list || []),
+          code,
+        ];
+      }
+    };
+
+    const applyBlockAds = () => {
+      if (!preferences.value.reject_geosite_list?.includes('category-ads')) {
+        preferences.value.reject_geosite_list = [
+          ...(preferences.value.reject_geosite_list || []),
+          'category-ads',
+        ];
+      }
+    };
+
     onMounted(async () => {
       await preferencesStore.fetchLeafPreferences();
       preferences.value = {
@@ -266,6 +362,8 @@ export default {
       loadDefaults,
       saved,
       error,
+      applyPreset,
+      applyBlockAds,
     };
   },
 };

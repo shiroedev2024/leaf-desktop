@@ -67,12 +67,25 @@
       </div>
 
       <!-- Missing Client ID Info -->
-      <Message v-else type="info">
-        <p class="text-sm">
-          Please provide a valid client ID. Check your provider's instructions
-          for details on obtaining a client ID.
+      <div
+        v-else
+        class="bg-blue-50 border border-blue-100 rounded-lg p-6 mt-4 text-center"
+      >
+        <i class="mdi mdi-information text-3xl text-blue-500 mb-2"></i>
+        <h3 class="text-lg font-semibold text-gray-900 mb-2">
+          No Subscription Found
+        </h3>
+        <p class="text-sm text-gray-600 mb-4 max-w-sm mx-auto leading-relaxed">
+          Please provide a valid Client ID above. Don't have a provider? Get a
+          secure Client ID instantly via our official Lite VPN Telegram Bot.
         </p>
-      </Message>
+        <button
+          @click="openTelegramBot"
+          class="inline-flex items-center px-5 py-2.5 bg-[#0088cc] text-white text-sm font-medium rounded-md hover:bg-[#0077b3] transition-colors shadow-sm"
+        >
+          <i class="mdi mdi-telegram mr-2 text-lg"></i> Open Telegram Bot
+        </button>
+      </div>
     </div>
     <div class="flex-shrink-0 mt-4 border-t pt-4">
       <div class="flex space-x-2">
@@ -82,7 +95,7 @@
           class="inline-flex justify-center items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none"
         >
           <i class="mdi mdi-clipboard-text mr-2"></i>
-          Import from clipboard
+          Import from Clipboard
         </button>
 
         <button
@@ -91,7 +104,7 @@
           class="flex-1 inline-flex justify-center items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-500 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-60"
         >
           <i class="mdi mdi-upload mr-2"></i>
-          Offline import
+          Offline Import
         </button>
       </div>
     </div>
@@ -109,7 +122,7 @@
         <div
           class="px-6 py-4 border-b border-gray-200 flex items-center justify-between"
         >
-          <h3 class="text-lg font-semibold text-gray-900">Offline import</h3>
+          <h3 class="text-lg font-semibold text-gray-900">Offline Import</h3>
           <button
             @click="closeOfflineDialog"
             class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -147,7 +160,7 @@
             <input
               type="password"
               v-model="passphrase"
-              placeholder="Leave empty if none"
+              placeholder="Leave empty if no passphrase is required"
               :disabled="isFetching"
               class="w-full py-2 px-3 border rounded-md focus:outline-none focus:ring focus:ring-blue-500"
             />
@@ -180,7 +193,7 @@
                 isFetching ? 'mdi-loading mdi-spin' : 'mdi-upload',
               ]"
             ></i>
-            <span>{{ isFetching ? 'Updating...' : 'Import offline' }}</span>
+            <span>{{ isFetching ? 'Updating...' : 'Import Offline' }}</span>
           </button>
         </div>
       </div>
@@ -199,6 +212,7 @@ import { ask, message } from '@tauri-apps/plugin-dialog';
 import { Utils } from '../utils/Utils.ts';
 import { error } from '../utils/logger';
 import { open } from '@tauri-apps/plugin-dialog';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 export default {
   name: 'SubscriptionComponent',
@@ -300,6 +314,10 @@ export default {
       }
     );
 
+    const openTelegramBot = async () => {
+      await openUrl('https://t.me/offical_lite_vpn_bot');
+    };
+
     const importFromClipboard = async () => {
       try {
         const content = await readText();
@@ -360,6 +378,7 @@ export default {
       closeOfflineDialog,
       preferencesStore,
       subscriptionStore,
+      openTelegramBot,
     };
   },
 };
