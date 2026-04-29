@@ -1,4 +1,1 @@
-Add new Stealth protocol
-Add new SSH protocol
-Add new method to fetch client ID for Russian users
-Improve connection speeds
+Add new SplitHttp protocol
