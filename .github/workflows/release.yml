@@ -2,7 +2,7 @@ name: 'Release Tauri App'
 
 on:
   push:
-    tags: 
+    tags:
       - 'v*.*.*'  # Only trigger on version tags like v2.2.0
   workflow_dispatch:  # Allow manual trigger
 
@@ -99,7 +99,6 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
-          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Configure Cargo registry
         shell: bash
